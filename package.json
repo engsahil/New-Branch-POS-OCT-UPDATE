@@ -1,0 +1,29 @@
+{
+  "name": "pos-app",
+  "private": true,
+  "version": "3.1.0",
+  "type": "module",
+  "description": "Offline-first Point of Sale application",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build && node scripts/build-sw.mjs",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit",
+    "test": "node scripts/test-indexeddb.mjs && node scripts/test-data-port.mjs && node scripts/test-receipts.mjs",
+    "serve": "node scripts/serve.mjs"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.2",
+    "fake-indexeddb": "6.2.4",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.9"
+  }
+}

@@ -1,0 +1,379 @@
+/*
+ * Compact, monochrome layouts for 58mm and 80mm thermal paper.
+ *
+ * Two competing goals are balanced here: type has to be big and bold enough
+ * to read on a moving roll, and the ticket has to stay short. Both are met by
+ * spending the paper on TYPE rather than on whitespace — the sheet padding,
+ * section gaps and separator margins are deliberately tight so the saved
+ * millimetres can go into a larger base font size.
+ *
+ * The sheet never declares a height. Its height is whatever the content needs,
+ * and printService measures that height to size the printed page.
+ */
+
+.sheet {
+  --paper: 80mm;
+  --pad-x: 3mm;
+  --pad-y: 1.6mm;
+
+  box-sizing: border-box;
+  width: var(--paper);
+  max-width: 100%;
+  padding: var(--pad-y) var(--pad-x);
+  margin: 0 auto;
+  background-color: #ffffff;
+  color: #000000;
+  font-family: var(--font-mono);
+  font-size: 15px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.w80 {
+  --paper: 80mm;
+  --pad-x: 3mm;
+  --pad-y: 1.6mm;
+  font-size: 15px;
+}
+
+.w58 {
+  --paper: 58mm;
+  --pad-x: 2.4mm;
+  --pad-y: 1.4mm;
+  font-size: 13px;
+  line-height: 1.18;
+}
+
+/* ---------- Customer header ---------- */
+
+.header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5mm;
+  text-align: center;
+}
+
+/*
+ * The logo is sized inside the printable width and keeps its aspect ratio.
+ * It contributes to the receipt height naturally — there is no reserved empty
+ * box, so a missing logo costs nothing.
+ */
+.logo {
+  display: block;
+  max-width: 54mm;
+  max-height: 24mm;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  object-position: center;
+}
+
+.w58 .logo {
+  max-width: 42mm;
+  max-height: 20mm;
+}
+
+.name {
+  max-width: 100%;
+  font-size: 1.35em;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+.contact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2mm;
+  max-width: 100%;
+}
+
+.contactLine,
+.info {
+  max-width: 100%;
+  font-size: 0.88em;
+  white-space: pre-line;
+}
+
+/* ---------- Compact ticket separators and metadata ---------- */
+
+.rule {
+  border-top: 1px dashed #000000;
+  margin: 0.5mm 0;
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2mm;
+  margin: 0;
+}
+
+.metaRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1.2mm;
+}
+
+.metaRow dt {
+  flex-shrink: 0;
+}
+
+.metaValue {
+  min-width: 0;
+  margin: 0;
+  text-align: right;
+  font-weight: 700;
+}
+
+/* ---------- Customer item columns ---------- */
+
+.itemsHead,
+.itemRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7mm 14mm 16mm;
+  gap: 0.8mm;
+  align-items: start;
+}
+
+.w58 .itemsHead,
+.w58 .itemRow {
+  grid-template-columns: minmax(0, 1fr) 6mm 11.5mm 12.5mm;
+  gap: 0.6mm;
+}
+
+.itemsHead {
+  margin-bottom: 0.8mm;
+  padding-bottom: 0.6mm;
+  border-bottom: 1px solid #000000;
+  font-size: 0.88em;
+  font-weight: 700;
+}
+
+.items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7mm;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.item {
+  min-width: 0;
+}
+
+.colItem {
+  min-width: 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.colQty {
+  min-width: 0;
+  text-align: center;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.colPrice,
+.colTotal {
+  min-width: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* The amount a line costs is what the customer looks for; the unit price is
+   supporting detail, so only the amount carries full weight. */
+.colTotal {
+  font-weight: 700;
+}
+
+.size {
+  font-weight: 400;
+}
+
+.dealTag {
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.dealContents {
+  list-style: none;
+  margin: 0.3mm 0 0;
+  padding-left: 2.5mm;
+}
+
+.dealContent {
+  font-size: 0.9em;
+  overflow-wrap: anywhere;
+}
+
+.itemNote {
+  margin: 0.5mm 0 0 2.5mm;
+  font-size: 0.9em;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Totals ---------- */
+
+.totals {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2mm;
+  margin: 0;
+}
+
+.totalRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1.2mm;
+}
+
+.totalRow dt {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.totalRow dd {
+  flex: 0 1 65%;
+  max-width: 65%;
+  min-width: 0;
+  margin: 0;
+  text-align: right;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.grandRow {
+  margin-top: 0.6mm;
+  padding-top: 0.7mm;
+  border-top: 1px solid #000000;
+  font-size: 1.25em;
+  font-weight: 700;
+}
+
+/* ---------- Footer ---------- */
+
+.count {
+  margin-top: 0.4mm;
+  text-align: center;
+  font-size: 0.85em;
+}
+
+.footer {
+  margin: 0.6mm 0 0;
+  text-align: center;
+  font-size: 0.88em;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Compact kitchen ticket (no prices or customer totals) ---------- */
+
+.kitchenSheet {
+  --pad-x: 2.6mm;
+  --pad-y: 1.6mm;
+  font-size: 14px;
+  line-height: 1.22;
+}
+
+.w58.kitchenSheet {
+  --pad-x: 2.2mm;
+  --pad-y: 1.4mm;
+  font-size: 12px;
+}
+
+.kitchenHeader {
+  text-align: center;
+}
+
+.kitchenTitle {
+  font-size: 1.4em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.15;
+}
+
+.kitchenItems {
+  display: flex;
+  flex-direction: column;
+  gap: 1mm;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.kitchenItem {
+  min-width: 0;
+}
+
+.kitchenItemHead {
+  display: grid;
+  grid-template-columns: 8mm minmax(0, 1fr);
+  gap: 1mm;
+  align-items: start;
+}
+
+.w58 .kitchenItemHead {
+  grid-template-columns: 7mm minmax(0, 1fr);
+}
+
+.kitchenQuantity {
+  font-size: 1.05em;
+  font-weight: 700;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.kitchenName {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.kitchenModifiers {
+  list-style: none;
+  margin: 0.3mm 0 0;
+  padding-left: 9mm;
+  font-size: 0.95em;
+  overflow-wrap: anywhere;
+}
+
+.w58 .kitchenModifiers {
+  padding-left: 8mm;
+}
+
+.kitchenModifiers li::before {
+  content: '- ';
+}
+
+.kitchenNote {
+  margin: 0.8mm 0 0;
+  font-size: 0.92em;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Print ---------- */
+
+@media print {
+  .sheet {
+    width: var(--paper);
+    margin: 0;
+    padding: var(--pad-y) var(--pad-x);
+    box-shadow: none;
+  }
+}
