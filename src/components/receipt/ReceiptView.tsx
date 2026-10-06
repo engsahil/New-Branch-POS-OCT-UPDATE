@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui';
-import { printReceipt } from '@/services/printService';
+import { printReceipt, printReceipts } from '@/services/printService';
 import {
   RECEIPT_WIDTHS,
   receiptService,
@@ -93,30 +93,24 @@ export function ReceiptView({
     }
   }
 
-  /**
-   * Each receipt gets its own print document and its own measured page height.
-   * Putting both on one tall @page made the shorter kitchen ticket inherit the
-   * customer receipt's physical length; two separate jobs avoid that blank roll.
-   */
+  /** Print customer first and kitchen second in one isolated print document. */
   async function printBoth() {
     const customer = receiptElement(customerRef);
     const kitchenReceipt = receiptElement(kitchenRef);
-    if (!customer && !kitchenReceipt) {
-      await printCurrent();
-      return;
-    }
 
     setPrintError(null);
     setPrintStatus(null);
     setPrinting(true);
     try {
-      if (customer) {
-        await printReceipt({ width: width as ReceiptWidth, container: customer });
+      if (!customer || !kitchenReceipt) {
+        throw new Error('Both receipts are not ready to print. Reopen the order and try again.');
       }
-      if (kitchenReceipt) {
-        await printReceipt({ width: width as ReceiptWidth, container: kitchenReceipt });
-      }
-      setPrintStatus('Both print dialogs closed. Confirm the selected printer accepted both jobs.');
+
+      await printReceipts({
+        width: width as ReceiptWidth,
+        containers: [customer, kitchenReceipt],
+      });
+      setPrintStatus('One print dialog closed. Customer was page 1 and kitchen page 2; confirm the printer accepted the job.');
     } catch (error) {
       setPrintError(error instanceof Error ? error.message : 'Could not print both receipts.');
     } finally {
@@ -153,7 +147,7 @@ export function ReceiptView({
                 : `Print ${activeTab === 'customer' ? 'Customer' : 'Kitchen'}`}
           </Button>
           <Button variant="secondary" disabled={printing} onClick={() => void printBoth()}>
-            {printing ? 'Printing…' : 'Print Both (2 jobs)'}
+            {printing ? 'Printing…' : 'Print Both'}
           </Button>
           {actions}
         </div>

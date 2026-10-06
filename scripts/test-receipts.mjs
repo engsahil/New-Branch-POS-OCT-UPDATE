@@ -225,6 +225,215 @@ for (const width of ['58mm', '80mm']) {
   assert.match(applied.textContent, /margin: 0/);
 }
 
+// Exercise the browser-print service with a fake native dialog boundary. This
+// verifies that one Print Both request invokes print() once, retains customer
+// then kitchen DOM order, and gives both tickets their independently measured
+// page sizes. The source element is also checked alone for customer/kitchen
+// isolation.
+class MockPrintNode {
+  constructor(tagName, ownerDocument) {
+    this.tagName = tagName;
+    this.ownerDocument = ownerDocument;
+    this.children = [];
+    this.attributes = new Map();
+    this.style = {
+      setProperty(name, value) {
+        this[name] = value;
+      },
+    };
+    this.scrollHeight = 0;
+    this.textContent = '';
+    this.id = '';
+  }
+
+  appendChild(child) {
+    this.children.push(child);
+    child.parentNode = this;
+    return child;
+  }
+
+  setAttribute(name, value) {
+    this.attributes.set(name, value);
+  }
+
+  getAttribute(name) {
+    return this.attributes.get(name) ?? null;
+  }
+
+  matches(selector) {
+    return selector === '[data-receipt-width]' && this.isReceipt === true;
+  }
+
+  querySelector() {
+    return null;
+  }
+
+  querySelectorAll(selector) {
+    const matches = [];
+    const visit = (node) => {
+      for (const child of node.children ?? []) {
+        if (selector === 'img' && child.tagName === 'IMG') matches.push(child);
+        visit(child);
+      }
+    };
+    visit(this);
+    return matches;
+  }
+
+  getBoundingClientRect() {
+    return { height: this.scrollHeight };
+  }
+}
+
+class MockPrintDocument {
+  constructor() {
+    this.head = new MockPrintNode('HEAD', this);
+    this.body = new MockPrintNode('BODY', this);
+  }
+
+  open() {}
+  write() {}
+  close() {}
+
+  createElement(tagName) {
+    return new MockPrintNode(tagName.toUpperCase(), this);
+  }
+
+  getElementById(id) {
+    return this.head.children.find((child) => child.id === id) ?? null;
+  }
+}
+
+class MockPrintWindow {
+  constructor() {
+    this.printCalls = 0;
+    this.listeners = new Map();
+  }
+
+  addEventListener(type, listener) {
+    this.listeners.set(type, listener);
+  }
+
+  removeEventListener(type) {
+    this.listeners.delete(type);
+  }
+
+  focus() {}
+
+  print() {
+    this.printCalls += 1;
+    this.listeners.get('afterprint')?.();
+  }
+}
+
+class MockPrintFrame extends MockPrintNode {
+  constructor(ownerDocument) {
+    super('IFRAME', ownerDocument);
+    this.contentDocument = new MockPrintDocument();
+    this.contentWindow = new MockPrintWindow();
+  }
+
+  remove() {
+    this.removed = true;
+  }
+}
+
+class MockSourceDocument extends MockPrintDocument {
+  constructor() {
+    super();
+    this.frames = [];
+  }
+
+  createElement(tagName) {
+    if (tagName.toLowerCase() !== 'iframe') return super.createElement(tagName);
+    const frame = new MockPrintFrame(this);
+    this.frames.push(frame);
+    return frame;
+  }
+}
+
+function sourceReceipt(label, height) {
+  const element = new MockPrintNode('ARTICLE', null);
+  element.isReceipt = true;
+  element.label = label;
+  element.scrollHeight = height;
+  element.cloneNode = () => sourceReceipt(label, height);
+  return element;
+}
+
+const originalPrintDocument = global.document;
+const originalPrintWindow = global.window;
+const mockSourceDocument = new MockSourceDocument();
+global.document = mockSourceDocument;
+global.window = {
+  setTimeout: (...args) => setTimeout(...args),
+  clearTimeout: (timer) => clearTimeout(timer),
+};
+
+try {
+  const customerSource = sourceReceipt('customer', 120);
+  const kitchenSource = sourceReceipt('kitchen', 45);
+
+  await printService.printReceipts({
+    width: '80mm',
+    containers: [customerSource, kitchenSource],
+  });
+
+  const bothFrame = mockSourceDocument.frames[0];
+  assert.equal(bothFrame.contentWindow.printCalls, 1, 'Print Both opens exactly one native print operation');
+  const bothRoot = bothFrame.contentDocument.body.children[0];
+  assert.deepEqual(
+    bothRoot.children.map((page) => page.children[0].label),
+    ['customer', 'kitchen'],
+    'Print Both preserves customer page 1 and kitchen page 2 order',
+  );
+  assert.deepEqual(
+    bothRoot.children.map((page) => page.getAttribute('data-print-page')),
+    ['0', '1'],
+    'each receipt has one dedicated page wrapper',
+  );
+  const bothPageCss = bothFrame.contentDocument.head.children.find(
+    (style) => style.id === 'thermal-page-size',
+  ).textContent;
+  const namedPageHeights = [...bothPageCss.matchAll(/@page receiptPage\d \{ size: 80mm ([\d.]+)mm;/g)]
+    .map((match) => Number(match[1]));
+  assert.deepEqual(
+    namedPageHeights,
+    [
+      printService.measureHeightMm(customerSource),
+      printService.measureHeightMm(kitchenSource),
+    ],
+    'customer and kitchen pages use their own measured content heights',
+  );
+
+  await printService.printReceipt({ width: '58mm', container: customerSource });
+  const customerFrame = mockSourceDocument.frames[1];
+  assert.equal(customerFrame.contentWindow.printCalls, 1, 'Print Customer invokes the dialog once');
+  assert.deepEqual(
+    customerFrame.contentDocument.body.children[0].children.map((page) => page.children[0].label),
+    ['customer'],
+    'Print Customer excludes the kitchen receipt',
+  );
+
+  await printService.printReceipt({ width: '58mm', container: kitchenSource });
+  const kitchenFrame = mockSourceDocument.frames[2];
+  assert.equal(kitchenFrame.contentWindow.printCalls, 1, 'Print Kitchen invokes the dialog once');
+  assert.deepEqual(
+    kitchenFrame.contentDocument.body.children[0].children.map((page) => page.children[0].label),
+    ['kitchen'],
+    'Print Kitchen excludes the customer receipt',
+  );
+
+  const printCss = fs.readFileSync(path.join(root, 'src/styles/print.css'), 'utf8');
+  assert.match(printCss, /break-before:\s*page[\s\S]*page-break-before:\s*always/);
+  assert.doesNotMatch(printCss, /page-break-after\s*:/, 'no trailing forced break creates a third page');
+} finally {
+  if (originalPrintDocument === undefined) delete global.document;
+  else global.document = originalPrintDocument;
+  if (originalPrintWindow === undefined) delete global.window;
+  else global.window = originalPrintWindow;
+}
+
 // Verify the actual logo command uses an aspect-preserving, bounded native-canvas raster.
 const originalDocument = global.document;
 const originalImage = global.Image;
@@ -314,5 +523,5 @@ try {
 }
 
 console.log(
-  'Receipt checks passed: 58/80mm text-column wrapping, long names/values, price and total presence, compact customer/kitchen ESC/POS streams, one-dot cut command, content-height measurement, explicit zero-margin page sizes, and proportional bounded logo raster dimensions.',
+  'Receipt checks passed: 58/80mm text-column wrapping, long names/values, customer/kitchen isolation, one-call Print Both ordering with independently measured page sizes, compact ESC/POS streams and cuts, content-height measurement, zero-margin page sizing, and bounded logo raster dimensions.',
 );
