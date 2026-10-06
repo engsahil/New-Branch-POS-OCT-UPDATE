@@ -35,20 +35,50 @@ export function measureHeightMm(element: HTMLElement | null): number {
   return Math.max(1, Math.round((contentMm + FEED_TAIL_MM) * 10) / 10);
 }
 
-/** Inject a valid, explicit two-dimension thermal page into the print document. */
+/**
+ * Inject physical page sizes for a receipt-only print document.
+ *
+ * A generic maximum-height page is a fallback for browsers that do not
+ * support named pages. Current browsers use one named page per receipt, so a
+ * short kitchen ticket does not inherit the customer's longer page length.
+ */
+export function applyPageSizes(
+  width: ReceiptWidth,
+  heightsMm: readonly number[],
+  targetDocument: Document = document,
+): void {
+  targetDocument.getElementById(PAGE_STYLE_ID)?.remove();
+
+  const safeHeights = heightsMm.map((height) =>
+    Number.isFinite(height) ? Math.max(1, height) : 1,
+  );
+  const fallbackHeight = Math.max(1, ...safeHeights);
+  const rules = [`@page { size: ${width} ${fallbackHeight}mm; margin: 0; }`];
+
+  if (safeHeights.length > 1) {
+    safeHeights.forEach((height, index) => {
+      const pageName = `receiptPage${index + 1}`;
+      rules.push(`@page ${pageName} { size: ${width} ${height}mm; margin: 0; }`);
+      rules.push(
+        `.print-root > [data-print-page="${index}"] { page: ${pageName}; }`,
+      );
+    });
+  }
+
+  const style = targetDocument.createElement('style');
+  style.id = PAGE_STYLE_ID;
+  style.media = 'print';
+  style.textContent = rules.join('\n');
+  targetDocument.head.appendChild(style);
+}
+
+/** Inject one explicit, zero-margin thermal page. */
 export function applyPageSize(
   width: ReceiptWidth,
   heightMm: number,
   targetDocument: Document = document,
 ): void {
-  targetDocument.getElementById(PAGE_STYLE_ID)?.remove();
-
-  const safeHeight = Number.isFinite(heightMm) ? Math.max(1, heightMm) : 1;
-  const style = targetDocument.createElement('style');
-  style.id = PAGE_STYLE_ID;
-  style.media = 'print';
-  style.textContent = `@page { size: ${width} ${safeHeight}mm; margin: 0; }`;
-  targetDocument.head.appendChild(style);
+  applyPageSizes(width, [heightMm], targetDocument);
 }
 
 function createFrame(width: ReceiptWidth): HTMLIFrameElement {
@@ -187,17 +217,22 @@ function waitForPrintCompletion(printWindow: Window): Promise<void> {
 }
 
 /**
- * Print one receipt in its own dynamically sized page/document. A missing
- * receipt is an error, never a request to print the whole application page.
+ * Print receipts together in one browser/system print operation. Each cloned
+ * receipt receives its own content-sized named page; the array order is the
+ * printed page order. A missing receipt is an error, never a request to print
+ * the application viewport.
  */
-export async function printReceipt({
+export async function printReceipts({
   width,
-  container,
+  containers,
 }: {
   width: ReceiptWidth;
-  container: HTMLElement | null;
+  containers: readonly (HTMLElement | null)[];
 }): Promise<void> {
-  if (!container) {
+  const available = containers.filter(
+    (container): container is HTMLElement => container !== null,
+  );
+  if (available.length === 0) {
     throw new Error('The receipt is not ready to print. Reopen it and try again.');
   }
 
@@ -215,11 +250,22 @@ export async function printReceipt({
 
     const root = printDocument.createElement('div');
     root.className = 'print-root';
-    const clone = container.cloneNode(true) as HTMLElement;
-    // A receipt clone can originate from a non-active preview tab. Printing
-    // the selected node must not inherit that tab's inline display:none.
-    clone.style.setProperty('display', 'block', 'important');
-    root.appendChild(clone);
+    const clones: HTMLElement[] = [];
+
+    available.forEach((container, index) => {
+      const page = printDocument.createElement('div');
+      if (available.length > 1) {
+        page.setAttribute('data-print-page', String(index));
+      }
+
+      const clone = container.cloneNode(true) as HTMLElement;
+      // A receipt clone can originate from a non-active preview tab. Printing
+      // the selected node must not inherit that tab's inline display:none.
+      clone.style.setProperty('display', 'block', 'important');
+      page.appendChild(clone);
+      root.appendChild(page);
+      clones.push(clone);
+    });
     printDocument.body.appendChild(root);
 
     await settleImages(root);
@@ -227,15 +273,17 @@ export async function printReceipt({
     // before measuring. The only height in the print document is content.
     await new Promise<void>((resolve) => window.setTimeout(resolve, 50));
 
-    const receipt =
-      clone.matches('[data-receipt-width]')
+    const heightsMm = clones.map((clone) => {
+      const receipt = clone.matches('[data-receipt-width]')
         ? clone
         : clone.querySelector<HTMLElement>('[data-receipt-width]');
-    const heightMm = measureHeightMm(receipt ?? root);
-    applyPageSize(width, heightMm, printDocument);
+      return measureHeightMm(receipt ?? clone);
+    });
+    applyPageSizes(width, heightsMm, printDocument);
 
     const completed = waitForPrintCompletion(printWindow);
     printWindow.focus();
+    // Exactly one native print invocation, regardless of receipt count.
     printWindow.print();
     keepFrameUntilAfterPrint = true;
 
@@ -246,4 +294,15 @@ export async function printReceipt({
     if (!keepFrameUntilAfterPrint) frame.remove();
     else window.setTimeout(() => frame.remove(), 0);
   }
+}
+
+/** Print one receipt, preserving the same isolated and content-sized path. */
+export function printReceipt({
+  width,
+  container,
+}: {
+  width: ReceiptWidth;
+  container: HTMLElement | null;
+}): Promise<void> {
+  return printReceipts({ width, containers: [container] });
 }

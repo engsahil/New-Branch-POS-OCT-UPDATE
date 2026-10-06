@@ -7,7 +7,8 @@
    not visibility:hidden), which is what prevents a blank leading page.
 
    The `@page` size itself is injected at print time by printService, because
-   `@page` cannot read custom properties or be toggled by a class.
+   `@page` cannot read custom properties or be toggled by a class. Print Both
+   uses a named, content-sized page for each receipt in the same print job.
    --------------------------------------------------------------------------- */
 
 @media print {
@@ -83,6 +84,21 @@
   [data-receipt-width] header {
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+
+  /*
+   * Print Both keeps each receipt together, gives every ticket after the
+   * customer an explicit new page, and never adds a trailing break after the
+   * kitchen ticket. Page dimensions are assigned by printService.
+   */
+  .print-root > [data-print-page] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-root > [data-print-page] ~ [data-print-page] {
+    break-before: page;
+    page-break-before: always;
   }
 
   /*
