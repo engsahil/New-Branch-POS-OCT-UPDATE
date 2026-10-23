@@ -72,6 +72,33 @@ const fixtures = {
   toppings: [{ ...base('topping-cheese'), name: 'Cheese', price: 50 }],
   addOns: [{ ...base('addon-sauce'), name: 'Sauce', price: 25 }],
   settings: [{ ...base('order.sequence'), value: 40 }],
+  notifications: [
+    {
+      ...base('notification-order'),
+      key: 'order:order-1',
+      kind: 'order',
+      severity: 'info',
+      title: 'Order A-0001 completed',
+      readAt: null,
+    },
+  ],
+  receiptAudits: [
+    {
+      ...base('audit-1'),
+      orderId: 'order-1',
+      orderNumber: 'A-0001',
+      itemId: 'line-1',
+      itemName: 'Burger',
+      previousQuantity: 2,
+      newQuantity: 1,
+      reason: 'Customer returned one item',
+      editor: 'admin',
+      before: { subtotal: 1800, discountTotal: 0, taxTotal: 0, grandTotal: 1800, itemCount: 2 },
+      after: { subtotal: 900, discountTotal: 0, taxTotal: 0, grandTotal: 900, itemCount: 1 },
+      beforeLine: { itemId: 'line-1', name: 'Burger', quantity: 2, lineTotal: 1800 },
+      afterLine: { itemId: 'line-1', name: 'Burger', quantity: 1, lineTotal: 900 },
+    },
+  ],
 };
 
 for (const [store, records] of Object.entries(fixtures)) {
@@ -102,7 +129,7 @@ if (backup.stores.sales[0].orderId !== backup.stores.orders[0].id) {
   throw new Error('Export broke the sale/order relationship.');
 }
 const preview = dataPortService.previewBackup(backup);
-if (preview.totalRecords !== 13 || preview.storeCounts.itemPrices !== 1) {
+if (preview.totalRecords !== 15 || preview.storeCounts.itemPrices !== 1) {
   throw new Error('Backup preview returned incorrect record counts.');
 }
 if (!Object.hasOwn(preview.excludedStores, 'admin') || !Object.hasOwn(preview.excludedStores, 'syncQueue')) {
@@ -199,5 +226,5 @@ if (await db.get(STORES.menuItems, 'must-not-partially-write')) {
 }
 
 console.log(
-  'IndexedDB checks passed: isolated schema migration, 12-store export snapshot, relationship preservation, backup preview/exclusions, safe merge and monotonic sequence, unique-conflict preflight, local credential/queue preservation, and atomic rollback.',
+  'IndexedDB checks passed: isolated schema migration, 14-store export snapshot, relationship preservation, backup preview/exclusions, safe merge and monotonic sequence, unique-conflict preflight, local credential/queue preservation, and atomic rollback.',
 );

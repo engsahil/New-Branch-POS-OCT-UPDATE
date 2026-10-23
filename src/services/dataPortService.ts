@@ -128,6 +128,7 @@ const portableData = createDataPortService(
     databaseName: DB_NAME,
     databaseVersion: DB_VERSION,
     allStores: [...ALL_STORES],
+  optionalStores: [STORES.notifications, STORES.receiptAudits],
     backupStores: [...backupStores],
     legacyBackupStores: [...legacyBackupStores],
     excludedStores: EXCLUDED_STORES,

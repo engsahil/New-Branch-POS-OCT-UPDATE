@@ -1,4 +1,6 @@
 export { CartPanel } from './CartPanel';
+export { CustomerPicker } from './CustomerPicker';
+export type { CustomerPickerProps } from './CustomerPicker';
 export type { CartPanelProps } from './CartPanel';
 export { DealGrid } from './DealGrid';
 export type { DealGridProps } from './DealGrid';

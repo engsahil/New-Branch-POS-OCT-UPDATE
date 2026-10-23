@@ -3,7 +3,7 @@
  * Single source of truth for identity, versioning and currency.
  */
 
-export const APP_VERSION = '3.1.0' as const;
+export const APP_VERSION = '5.1.9' as const;
 
 export const APP_CONFIG = {
   name: 'POS',

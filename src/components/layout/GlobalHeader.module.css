@@ -1,0 +1,30 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  flex-shrink: 0;
+  min-height: 54px;
+  padding: var(--sp-2) var(--sp-5);
+  padding-top: calc(var(--sp-2) + var(--safe-top));
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.restaurantName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-wide);
+}
+
+@media (max-width: 639px) {
+  .header {
+    padding: var(--sp-2) var(--sp-4);
+    padding-top: calc(var(--sp-2) + var(--safe-top));
+  }
+}

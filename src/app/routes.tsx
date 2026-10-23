@@ -10,6 +10,7 @@ import { lazy, type ReactElement } from 'react';
 import {
   AdminIcon,
   CustomersIcon,
+  DashboardIcon,
   DeliveryIcon,
   InventoryIcon,
   MenuBookIcon,
@@ -19,6 +20,7 @@ import {
 } from '@/components/ui/Icons';
 import type { NavItem } from '@/types/navigation';
 
+const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
 const PosPage = lazy(() => import('@/pages/PosPage'));
 const SalesPage = lazy(() => import('@/pages/SalesPage'));
 const CustomersPage = lazy(() => import('@/pages/CustomersPage'));
@@ -30,6 +32,7 @@ const DeliveryPage = lazy(() => import('@/pages/DeliveryPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
 export const ROUTE_PATHS = {
+  dashboard: '/dashboard',
   pos: '/',
   sales: '/sales',
   customers: '/customers',
@@ -53,6 +56,7 @@ export interface AppRoute {
 /** Child routes rendered inside the app layout outlet. */
 export const appRoutes: AppRoute[] = [
   { id: 'pos', index: true, element: <PosPage /> },
+  { id: 'dashboard', path: 'dashboard', element: <DashboardPage /> },
   { id: 'sales', path: 'sales', element: <SalesPage /> },
   { id: 'customers', path: 'customers', element: <CustomersPage /> },
   { id: 'menu', path: 'menu', element: <MenuPage /> },
@@ -67,6 +71,15 @@ export const appRoutes: AppRoute[] = [
  * The primary sections are shared by the desktop sidebar and mobile tab bar.
  */
 export const NAV_ITEMS: NavItem[] = [
+  {
+    id: 'dashboard',
+    label: 'Dashboard',
+    description: 'Overview & shortcuts',
+    path: ROUTE_PATHS.dashboard,
+    icon: DashboardIcon,
+    primary: true,
+    matchChildren: true,
+  },
   {
     id: 'pos',
     label: 'POS',

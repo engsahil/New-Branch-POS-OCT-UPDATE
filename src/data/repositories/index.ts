@@ -18,6 +18,8 @@ import type {
   OrderRecord,
   RestaurantRecord,
   SaleRecord,
+  NotificationRecord,
+  ReceiptAuditRecord,
   SettingRecord,
   SyncQueueRecord,
   ToppingRecord,
@@ -70,6 +72,12 @@ export const addOnsRepository: Repository<AddOnRecord> =
 export const settingsRepository: Repository<SettingRecord> =
   createRepository<SettingRecord>(STORES.settings);
 
+export const notificationsRepository: Repository<NotificationRecord> =
+  createRepository<NotificationRecord>(STORES.notifications);
+
+export const receiptAuditsRepository: Repository<ReceiptAuditRecord> =
+  createRepository<ReceiptAuditRecord>(STORES.receiptAudits);
+
 export const syncQueueRepository: Repository<SyncQueueRecord> =
   createRepository<SyncQueueRecord>(STORES.syncQueue);
 
@@ -88,5 +96,7 @@ export const repositories = {
   [STORES.toppings]: toppingsRepository,
   [STORES.addOns]: addOnsRepository,
   [STORES.settings]: settingsRepository,
+  [STORES.notifications]: notificationsRepository,
+  [STORES.receiptAudits]: receiptAuditsRepository,
   [STORES.syncQueue]: syncQueueRepository,
 } as const;

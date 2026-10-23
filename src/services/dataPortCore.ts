@@ -39,6 +39,12 @@ export interface DataPortConfiguration {
   backupStores: string[];
   /** Store list written by the original v1 exporter. */
   legacyBackupStores: string[];
+  /**
+   * Stores introduced after the backup format first shipped. A backup made
+   * before they existed may legitimately omit them; restore treats the
+   * missing stores as empty and never fails for that reason.
+   */
+  optionalStores?: string[];
   /** Explicitly disclosed security/transport exclusions. */
   excludedStores: Record<string, string>;
   orderSequenceSettingId: string;
@@ -111,19 +117,36 @@ function requireStoreManifest(
   actual: unknown,
   expected: string[],
   label: string,
+  optionalStores: string[] = [],
 ): void {
   if (!Array.isArray(actual) || actual.some((entry) => typeof entry !== 'string')) {
     throw new Error(`The backup ${label} manifest is missing or invalid.`);
   }
 
   const actualSet = new Set(actual as string[]);
-  if (actualSet.size !== actual.length || actualSet.size !== expected.length) {
-    throw new Error(`The backup ${label} manifest does not match this POS schema.`);
+  if (actualSet.size !== actual.length) {
+    throw new Error(`The backup ${label} manifest contains duplicate entries.`);
   }
-  for (const name of expected) {
-    if (!actualSet.has(name)) {
-      throw new Error(`The backup is missing the required “${name}” store.`);
+  for (const name of actualSet) {
+    if (!expected.includes(name)) {
+      throw new Error(`The backup ${label} manifest does not match this POS schema.`);
     }
+  }
+
+  // Every store from the exporting build must be present. Stores added by a
+  // later release may be absent, which is how a pre-v5.1.9 backup still
+  // restores into this schema.
+  for (const name of expected) {
+    if (optionalStores.includes(name)) continue;
+    if (!actualSet.has(name)) {
+      throw new Error(`The backup manifest is missing the required “${name}” store.`);
+    }
+  }
+
+  // Schema order is preserved for whatever the backup actually contains.
+  const expectedOrder = expected.filter((name) => actualSet.has(name));
+  if (expectedOrder.join('|') !== (actual as string[]).join('|')) {
+    throw new Error(`The backup ${label} manifest is not in schema order.`);
   }
 }
 
@@ -267,7 +290,12 @@ function parseAndValidate(
         'This backup uses an unsupported POS data schema. Update the POS before importing it. No data was changed.',
       );
     }
-    requireStoreManifest(input.schema.stores, config.backupStores, 'store');
+    requireStoreManifest(
+      input.schema.stores,
+      config.backupStores,
+      'store',
+      config.optionalStores,
+    );
     const suppliedExcludedStores = input.excludedStores;
     if (!isRecord(suppliedExcludedStores)) {
       throw new Error('The backup exclusion manifest is missing or invalid.');
@@ -286,12 +314,17 @@ function parseAndValidate(
   }
 
   const keys = Object.keys(input.stores);
-  requireStoreManifest(keys, sourceStoreNames, 'data');
+  requireStoreManifest(keys, sourceStoreNames, 'data', isLegacy ? [] : config.optionalStores);
 
   const stores: Record<string, DataPortRecord[]> = {};
   let excludedCredentialRecords = 0;
 
-  for (const name of sourceStoreNames) {
+  const presentStores = sourceStoreNames.filter(
+    (name) =>
+      !config.optionalStores?.includes(name) || hasOwn(input.stores as Record<string, unknown>, name),
+  );
+
+  for (const name of presentStores) {
     const rows = input.stores[name];
     if (!Array.isArray(rows)) {
       throw new Error(`The backup store “${name}” is not an array.`);

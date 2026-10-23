@@ -16,8 +16,9 @@ export const DB_NAME = 'pos-db';
  * v1 — foundation stores (products, categories, orders, settings, outbox)
  * v2 — full domain schema for offline-first operation
  * v6 — customers store, by_customerId index on orders
+ * v7 — notifications and receipt edit audit stores (v5.1.9)
  */
-export const DB_VERSION = 6;
+export const DB_VERSION = 7;
 
 export const STORES = {
   admin: 'admin',
@@ -33,6 +34,8 @@ export const STORES = {
   toppings: 'toppings',
   addOns: 'addOns',
   settings: 'settings',
+  notifications: 'notifications',
+  receiptAudits: 'receiptAudits',
   syncQueue: 'syncQueue',
 } as const;
 
@@ -184,6 +187,26 @@ export const STORE_SCHEMAS: StoreSchema[] = [
     keyPath: 'id',
     description: 'Application settings as individual keyed records.',
     indexes: [{ name: 'by_updatedAt', keyPath: 'updatedAt' }],
+  },
+  {
+    name: STORES.notifications,
+    keyPath: 'id',
+    description: 'Persisted in-app notifications with read state.',
+    indexes: [
+      { name: 'by_key', keyPath: 'key' },
+      { name: 'by_createdAt', keyPath: 'createdAt' },
+      { name: 'by_readAt', keyPath: 'readAt' },
+    ],
+  },
+  {
+    name: STORES.receiptAudits,
+    keyPath: 'id',
+    description:
+      'Append-only audit trail of authorised edits to completed receipts.',
+    indexes: [
+      { name: 'by_orderId', keyPath: 'orderId' },
+      { name: 'by_createdAt', keyPath: 'createdAt' },
+    ],
   },
   {
     name: STORES.syncQueue,

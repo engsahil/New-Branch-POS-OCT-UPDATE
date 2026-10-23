@@ -37,6 +37,9 @@ export const DEFAULT_RECEIPT_WIDTH: ReceiptWidth = '80mm';
 /** Persisted default paper width. */
 export const RECEIPT_WIDTH_KEY = 'receipt.width';
 
+/** Whether the saved restaurant logo is printed on customer receipts. */
+export const RECEIPT_SHOW_LOGO_KEY = 'receipt.showLogo';
+
 export interface ReceiptLine {
   id: ID;
   name: string;
@@ -62,6 +65,8 @@ export interface ReceiptHeader {
   /** Restaurant name, or null when the profile has not been filled in. */
   name: string | null;
   logo: RestaurantLogo | null;
+  /** False when the operator has switched the logo off in printer settings. */
+  showLogo?: boolean;
   address: string | null;
   phone: string | null;
   email: string | null;
@@ -151,6 +156,15 @@ export const receiptService = {
     await settingsService.set(RECEIPT_WIDTH_KEY, width);
   },
 
+  /** Whether to print the restaurant logo on customer receipts. */
+  async getShowLogo(): Promise<boolean> {
+    return settingsService.get<boolean>(RECEIPT_SHOW_LOGO_KEY, true);
+  },
+
+  async setShowLogo(show: boolean): Promise<void> {
+    await settingsService.set(RECEIPT_SHOW_LOGO_KEY, show);
+  },
+
   /**
    * Assemble a receipt from an order and its items.
    */
@@ -159,6 +173,7 @@ export const receiptService = {
     items: OrderItemRecord[],
   ): Promise<ReceiptModel> {
     const profile = await restaurantService.getRecord();
+    const showLogo = await this.getShowLogo();
 
     const lines: ReceiptLine[] = [];
     let savingsTotal = 0;
@@ -227,6 +242,7 @@ export const receiptService = {
       header: {
         name: orNull(profile?.name),
         logo: profile?.logo ?? null,
+        showLogo,
         address: orNull(profile?.address),
         phone: orNull(profile?.phone),
         email: orNull(profile?.email),

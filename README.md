@@ -1,10 +1,93 @@
-# POS — v3.1.0
+# POS — v5.1.9
 
-Offline-first Point of Sale application. **Step 3: Admin Authentication.**
+Offline-first Restaurant Point of Sale application. Version **5.1.9**.
 
-Architecture (Step 1), application shell and navigation (Step 2), and admin
-login with route protection (Step 3). No business logic yet — the four
-sections remain empty states behind the login.
+The sections below document the original architecture (still accurate) and the
+earlier 3.x behaviour. Later sections were written for those releases and are
+kept as history; where they conflict with the current application, the v5.1.9
+notes below take precedence.
+
+## v5.1.9 — what changed
+
+- **Light Clean & Fresh theme** applied through `src/styles/tokens.css` (white
+  cards on `#F7FAF8`, restaurant green `#176B4D`, mint accent `#E4F4EC`). The
+  existing font stack is unchanged; no font was downloaded.
+- **Saved-customer selection for all three order types.** Dine-in, Takeaway and
+  Delivery now use the same search/select control (`CustomerPicker`). Picking a
+  customer fills the saved name, phone and address, and the order is linked to
+  that customer id — so checkout updates the existing record instead of
+  creating a duplicate. Guest orders remain possible.
+- **Dashboard** at `/dashboard` with real figures (today's sales and orders,
+  dine-in tables used, new customers, this week's payment/order-type mix, best
+  sellers, low-stock alerts, recent orders) and working shortcuts to every
+  module. Navigation gained a Dashboard entry; `/` is still the POS.
+- **Notification centre**: persisted notifications with dedupe keys, unread
+  count, mark-one/mark-all read, per-kind preferences and links into the
+  relevant module. Generated from completed orders, stock thresholds, order
+  cancellations and receipt corrections. No polling, no duplicate entries.
+- **Sales reports** with Today / Yesterday / This week / Last week / This month
+  / Last month / custom ranges. Reports show gross and net sales, discounts,
+  tax, refunds/voids, order count, items, average order, payment and order-type
+  breakdowns, daily and hourly bars, and product/category performance — all
+  from stored sales and order lines. CSV export uses the same range and figures.
+- **Order history and receipt corrections**: searchable, date-filtered,
+  paginated order list with a receipt preview that reuses the real receipt
+  components. Authorised corrections change one line quantity (or void it),
+  recalculate totals/tax/discounts, move stock by the exact difference, write
+  an append-only audit row (before/after, editor, reason, timestamp), and mark
+  the receipt "Recently edited". Deal lines and cancelled/refunded sales are
+  locked.
+- **First-run setup wizard** for a genuinely new installation (restaurant
+  details, tax, receipt footer, administrator password) and a **guided tour**
+  anchored to the real navigation. Existing installations are detected and
+  marked complete without any prompt; the tour is per user and can be replayed
+  from Admin → Settings.
+- **Database v7** adds `notifications` and `receiptAudits`. Both migrations are
+  additive; no existing store, record or index is dropped or rewritten.
+- **Centralised customisation** in Admin → Settings: which Dashboard blocks and
+  which order-row details are shown, notification kinds, receipt paper and
+  auto-open behaviour, and a reset-to-default action. Preferences are stored in
+  the existing `settings` store under `display.preferences`; they hide blocks
+  and details only and never filter or change a stored figure. The colour
+  theme, currency and locale stay fixed at build time so receipts and exported
+  reports cannot disagree with each other.
+- **New tests**: `scripts/test-v519.mjs` covers customer reuse, notification
+  dedupe/unread counts, report totals and filters, receipt corrections with
+  stock movement and refusal cases, setup detection, and display preferences
+  (persist, merge with defaults, reset).
+
+## Verification (v5.1.9)
+
+Every command below was executed in this working tree; the results are
+reproduced verbatim from the run, not predicted.
+
+| Check | Command | Result |
+| --- | --- | --- |
+| Types | `npx tsc -b --noEmit` | exit 0, no diagnostics |
+| Unit/service tests | `npm test` | 4 suites pass (IndexedDB, data port, receipts, v5.1.9) |
+| Production build | `npm run build` | typecheck + build succeed, 52 precached files |
+| UI smoke (development only) | `node scripts/smoke-ui.mjs` | mounts, signs in, renders 7 routes, bell present, wizard skipped, no console errors |
+
+`npm test` is dependency-free and offline. The UI smoke run needs two
+development-only packages that are **not** in `package.json`:
+
+```bash
+npm install --no-save happy-dom fake-indexeddb
+VITE_ADMIN_PASSWORD=smoke-test-password npm run build   # throwaway build
+node scripts/smoke-ui.mjs
+npm run build                                          # rebuild without the test password
+```
+
+The smoke run loads the built bundle in Happy DOM against a fake IndexedDB,
+signs in through the real form, then visits `/dashboard`, `/sales`,
+`/customers`, `/menu`, `/inventory`, `/admin` and `/`, asserting each screen
+renders and that nothing logs a console error. It is not a substitute for a
+browser: layout, CSS painting and printing still require a real device.
+
+**Not verified:** no physical thermal printer, no browser, and no touch device
+were available in this environment. Printing is verified at the calculation and
+encoder level only (see Printing); no claim is made that a specific printer
+produced a correct page.
 
 ## Stack
 
@@ -61,8 +144,9 @@ src/
     RequireAuth.tsx      route guard
     routes.tsx           route & navigation registry (single source of truth)
   components/
-    layout/              AppLayout, Sidebar, TabBar, OfflineBanner,
-                         PageHeader, ErrorBoundary
+    layout/              AppLayout, Sidebar, TabBar, OfflineBanner, PageHeader,
+                         GlobalHeader (notification bell), NotificationBell,
+                         ErrorBoundary
     admin/               AdminNav, DashboardSection, ManageLinkSection,
                          AboutSection, LegalDocumentView,
                          RestaurantProfileForm, PrinterSection,
@@ -71,9 +155,11 @@ src/
     deals/               DealForm, DealList, DealProductPicker
     inventory/           InventoryForm, InventoryList
     pos/                 ItemGrid, DealGrid, CartPanel, OrderConfirmation
-    receipt/             Receipt (58/80mm layout), ReceiptView, PrintPanel
+    receipt/             Receipt (58/80mm layout), ReceiptView, PrintPanel,
+                         OrderReceiptDialog (preview + print actions)
     sales/               SummaryCard, WeekChart
     menu/                MenuItemForm, MenuItemList
+    onboarding/           SetupWizard (first run), AppTour (guided tour)
     ui/                  Button, Card, EmptyState, Input, Spinner, Textarea,
                          Icons
   content/
@@ -91,18 +177,19 @@ src/
     storage/             safe localStorage for UI preferences
   hooks/                 useOnlineStatus, useMenu, useInventory, useDeals,
                          useCart, useSales, useCustomers, useSyncStatus,
-                         useInstallState
-  pages/                 Login, Pos, Sales, Customers, Menu, Deals, Inventory,
-                         Admin, NotFound
+                         useInstallState, useNotifications, useDisplayPreferences
+  pages/                 Login, Dashboard, Pos, Sales, Customers, Menu, Deals,
+                         Inventory, Delivery, Admin, NotFound
   services/              authService (login, session, credentials)
                          customerService (records, stats, order history),
                          databaseService (startup, diagnostics, reset)
                          dealService, escpos (ESC/POS encoder), inventoryService,
                          menuService, orderService, printService,
                          licenseService, license/validator (pluggable),
-                         printerService, receiptService,
+                         printerService, receiptService, receiptEditService,
                          restaurantService, salesService, settingsService,
-                         syncQueueService
+                         notificationService, onboardingService,
+                         displayPreferencesService, syncQueueService
   pwa/                   service worker registration, sw.template.js,
                          installService (install capability detection)
   styles/                tokens.css, reset.css, global.css, print.css
@@ -112,7 +199,7 @@ src/
 
 ## Local database
 
-All data lives in IndexedDB (`pos-db`, version 6) so the terminal keeps working
+All data lives in IndexedDB (`pos-db`, version 7) so the terminal keeps working
 without a network connection. There is no demo data — the database starts
 completely empty apart from the admin account created on first sign-in.
 
@@ -515,6 +602,11 @@ Nothing here is a dead switch:
 - **Default low stock level** pre-fills the alert field when adding inventory.
 - **Show receipt after completing an order** is honoured by the POS.
 - **Paper width** is the default every new receipt opens with.
+- **Dashboard and order list** switches in Admin → Settings drive
+  `useDisplayPreferences()`; the Dashboard and the Sales order list re-render
+  immediately when they are saved. Reset to default clears the stored key.
+- **Notification kinds** are checked by `notificationService` before an entry
+  is written, so turning a kind off stops new entries of that kind only.
 
 ### Data backup and restore
 
@@ -1022,7 +1114,7 @@ trigger a one-minute lockout.
 
 ## Key decisions
 
-**Version** — `3.1.0` in `package.json` and `src/config/app.config.ts` (the service worker cache revision is derived from the built assets).
+**Version** — `5.1.9` in `package.json` and `src/config/app.config.ts` (the service worker cache revision is derived from the built assets).
 
 **Currency** — Pakistani Rupees only. Money is stored as **integer paisa** to avoid
 floating-point drift and formatted through `formatMoney()` so `Rs.` is never
@@ -1041,11 +1133,11 @@ by default, and an `outbox` store is already provisioned to queue mutations for 
 future sync engine. New domains need one entry in `STORE_SCHEMAS` plus one line
 in the repository registry.
 
-**Styling** — White surfaces on a warm beige/cream background, espresso ink for
-text, and a restrained bronze accent used only for active markers and focus.
-Warm neutrals throughout — no cool greys. All colour, spacing, type, radius,
-elevation, z-index and layout values live in `src/styles/tokens.css`; components
-use CSS Modules and reference tokens only.
+**Styling** — The Light Clean & Fresh theme: white cards on a subtle
+mint-tinted off-white background (`#F7FAF8`), deep restaurant green
+(`#176B4D`) for primary actions, and a soft mint accent (`#E4F4EC`). All
+colour, spacing, type, radius, elevation, z-index and layout values live in
+`src/styles/tokens.css`; components use CSS Modules and reference tokens only.
 
 **Motion** — Short, purposeful transitions: a 320ms page fade-and-rise, a
 growing bar on the active nav item, hover/focus fades on every control, and a
@@ -1061,11 +1153,11 @@ tab bar carrying all eight sections. Touch targets are 44px minimum, inputs use
 worker are in place. The worker is registered in production builds only so dev
 hot reload is unaffected.
 
-**No chrome** — There is no global header, no footer, no marketing sections and
-no dashboard widgets. Navigation is the only persistent UI; each screen renders
-its own `PageHeader`. The offline banner appears only when the connection drops.
-All sections remain reachable from the horizontally scrollable mobile tab bar,
-so there is no hamburger menu or drawer.
+**No chrome** — A slim header exists only to host the notification centre and the
+configured restaurant name; there is no footer, marketing section or promotional
+content. Each screen renders its own `PageHeader`, and the offline banner appears
+only when the connection drops. All sections remain reachable from the
+horizontally scrollable mobile tab bar, so there is no hamburger menu or drawer.
 
 **No invented data** — Every section is a professional empty state. The only
 figures shown anywhere are genuine runtime facts on the Admin screen (version,
@@ -1079,11 +1171,11 @@ Checks run for this change:
   build still reports the existing Vite mixed static/dynamic-import warnings
   for sync/settings modules.
 - `scripts/test-indexeddb.mjs` runs the real database and backup services
-  against isolated in-memory IndexedDB, checking the 12-store snapshot,
+  against isolated in-memory IndexedDB, checking the 14-store snapshot,
   relationships, preview/exclusions, merge, monotonic order sequence, unique
   conflict preflight, device-local data preservation and transaction rollback.
 - `scripts/test-data-port.mjs` additionally runs the backup core against an
-  isolated in-memory transactional adapter: 23 business records across 12
+  isolated in-memory transactional adapter: 23 business records across 14
   stores, IDs/relationships, logo and settings, merge/re-import, order sequence,
   conflict rollback, invalid-version rejection and v1 compatibility.
 - `scripts/test-receipts.mjs` checks the authored 58mm/80mm typography/logo/
@@ -1423,7 +1515,7 @@ through the same display-mode query the application reads.
 
 Settings, privacy and branding (50 assertions):
 
-- Application information shows Version `3.1.0`, `Pakistani Rupees (Rs.)`,
+- Application information shows Version `5.1.9`, `Pakistani Rupees (Rs.)`,
   `PKR`, locale, time zone, local storage and provider.
 - Privacy Policy renders with 10 correctly numbered sections covering what is
   stored, the absence of analytics, when data leaves the device, PBKDF2

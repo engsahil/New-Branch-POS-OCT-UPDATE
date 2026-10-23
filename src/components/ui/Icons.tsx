@@ -256,3 +256,43 @@ export const TagIcon = (props: IconProps) => (
     <circle cx="8.6" cy="8.6" r="1.35" />
   </Icon>
 );
+
+/* ---------- Notifications & dashboard ---------- */
+
+export const BellIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M18 9a6 6 0 1 0-12 0c0 4.2-1.5 5.4-2.5 6.2-.4.3-.2 1 .3 1h16.4c.5 0 .7-.7.3-1C19.5 14.4 18 13.2 18 9Z" />
+    <path d="M9.6 19.5a2.6 2.6 0 0 0 4.8 0" />
+  </Icon>
+);
+
+export const DashboardIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1.6" />
+    <rect x="13" y="3.5" width="7.5" height="7.5" rx="1.6" />
+    <rect x="3.5" y="13" width="7.5" height="7.5" rx="1.6" />
+    <rect x="13" y="13" width="7.5" height="7.5" rx="1.6" />
+  </Icon>
+);
+
+export const DownloadIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M12 4v11" />
+    <path d="m7.5 10.5 4.5 4.5 4.5-4.5" />
+    <path d="M4.5 19.5h15" />
+  </Icon>
+);
+
+export const EditIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M4.5 19.5h4l10-10a2.1 2.1 0 0 0-3-3l-10 10Z" />
+    <path d="m13.5 7.5 3 3" />
+  </Icon>
+);
+
+export const ReceiptIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M6 3.5h12v17l-3-2-3 2-3-2-3 2Z" />
+    <path d="M9 8.5h6M9 12h6" />
+  </Icon>
+);

@@ -21,6 +21,8 @@ export const SETTING_KEYS = {
   orderNumberPrefix: 'order.numberPrefix',
   /** Quantity at or below which inventory is flagged low by default. */
   lowStockDefault: 'inventory.lowStockDefault',
+  /** Which Dashboard blocks and order-list details are shown. */
+  displayPreferences: 'display.preferences',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];

@@ -303,6 +303,13 @@ export interface OrderRecord extends BaseEntity {
   /** Set when the order is cancelled; keeps the audit trail on the order. */
   cancelledAt?: ISODateString | null;
   /**
+   * Set whenever an authorised receipt correction (quantity change or line
+   * void) has been applied after completion. The original figures remain in
+   * the receiptAudits store; these fields are the quick "was edited" marker.
+   */
+  editedAt?: ISODateString | null;
+  editCount?: number;
+  /**
    * Units actually deducted from each inventory line when this order
    * completed, keyed by menu item ID. Cancellation restores exactly this
    * amount — never more (an over-sold line that clamped to zero) and never
@@ -369,10 +376,18 @@ export interface SaleRecord extends BaseEntity {
   grandTotal: Paisa;
   paymentMethod: PaymentMethod;
   itemCount: number;
+  /**
+   * Order type copied at completion so report breakdowns need no join.
+   * Optional because sales written before v5.1.9 have no such field; the
+   * reporting code falls back to the linked order for those rows.
+   */
+  orderType?: OrderType;
   /** Linked customer record when the order carried customer details. */
   customerId?: ID | null;
   /** Set when the sale is later refunded. */
   refundedAt?: ISODateString | null;
+  /** Set when a permitted receipt correction changed this sale's figures. */
+  editedAt?: ISODateString | null;
   /**
    * Set when the order is cancelled. The row is kept for the audit trail
    * but excluded from every total, report and cash-flow figure.
@@ -399,6 +414,79 @@ export interface CustomerRecord extends BaseEntity {
   email?: string;
   address?: string;
   note?: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* Notifications                                                       */
+/* ------------------------------------------------------------------ */
+
+export type NotificationKind =
+  | 'order'
+  | 'stock'
+  | 'payment'
+  | 'audit'
+  | 'system';
+
+export type NotificationSeverity = 'info' | 'warning' | 'critical';
+
+/**
+ * A single in-app notification.
+ *
+ * Persisted so the unread count survives a refresh and repeated app starts
+ * cannot duplicate the same event: `key` is the dedupe key and is unique in
+ * practice (see notificationService, which checks before writing).
+ */
+export interface NotificationRecord extends BaseEntity {
+  key: string;
+  kind: NotificationKind;
+  severity: NotificationSeverity;
+  title: string;
+  body?: string;
+  /** In-app route the notification opens, e.g. /sales. */
+  link?: string | null;
+  readAt?: ISODateString | null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Receipt edit audit                                                  */
+/* ------------------------------------------------------------------ */
+
+/** Snapshot of a receipt line as it was before/after a correction. */
+export interface ReceiptAuditLine {
+  itemId: ID;
+  name: string;
+  quantity: number;
+  lineTotal: Paisa;
+}
+
+/** Snapshot of the financial header before/after a correction. */
+export interface ReceiptAuditTotals {
+  subtotal: Paisa;
+  discountTotal: Paisa;
+  taxTotal: Paisa;
+  grandTotal: Paisa;
+  itemCount: number;
+}
+
+/**
+ * Append-only record of an authorised correction to a completed receipt.
+ *
+ * Never updated or deleted by the application: it is the audit trail that
+ * proves what changed, who changed it, when, and why.
+ */
+export interface ReceiptAuditRecord extends BaseEntity {
+  orderId: ID;
+  orderNumber: string;
+  itemId: ID;
+  itemName: string;
+  previousQuantity: number;
+  newQuantity: number;
+  reason: string;
+  editor: string;
+  before: ReceiptAuditTotals;
+  after: ReceiptAuditTotals;
+  beforeLine: ReceiptAuditLine;
+  afterLine: ReceiptAuditLine;
 }
 
 /* ------------------------------------------------------------------ */
