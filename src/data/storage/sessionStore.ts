@@ -9,6 +9,15 @@
 import type { AuthSession } from '@/types/auth';
 
 const SESSION_KEY = 'pos.auth.session';
+/**
+ * Legacy failed-attempt/lockout key written by older builds.
+ *
+ * The wrong-password cooldown has been removed at its source, so nothing
+ * reads or writes this value anymore. The key is only kept so `clearAttempts`
+ * can delete a stale lockout record left behind by an older build — an
+ * operator who was mid-lockout when the terminal updated must be able to
+ * sign in straight away.
+ */
 const ATTEMPTS_KEY = 'pos.auth.attempts';
 
 function available(): boolean {
@@ -26,12 +35,6 @@ const enabled = typeof window !== 'undefined' && available();
 
 /** In-memory fallback so auth still works in private/blocked-storage modes. */
 let memorySession: AuthSession | null = null;
-let memoryAttempts: FailedAttempts | null = null;
-
-export interface FailedAttempts {
-  count: number;
-  lockedUntil: number | null;
-}
 
 function isSession(value: unknown): value is AuthSession {
   if (typeof value !== 'object' || value === null) return false;
@@ -77,35 +80,14 @@ export const sessionStore = {
     }
   },
 
-  readAttempts(): FailedAttempts {
-    const fallback: FailedAttempts = { count: 0, lockedUntil: null };
-    if (!enabled) return memoryAttempts ?? fallback;
-    try {
-      const raw = window.localStorage.getItem(ATTEMPTS_KEY);
-      if (!raw) return fallback;
-      const parsed = JSON.parse(raw) as Partial<FailedAttempts>;
-      return {
-        count: typeof parsed.count === 'number' ? parsed.count : 0,
-        lockedUntil:
-          typeof parsed.lockedUntil === 'number' ? parsed.lockedUntil : null,
-      };
-    } catch {
-      return fallback;
-    }
-  },
-
-  writeAttempts(attempts: FailedAttempts): void {
-    memoryAttempts = attempts;
-    if (!enabled) return;
-    try {
-      window.localStorage.setItem(ATTEMPTS_KEY, JSON.stringify(attempts));
-    } catch {
-      /* no-op */
-    }
-  },
-
+  /**
+   * Delete any legacy failed-attempt/lockout record.
+   *
+   * Failed attempts are no longer counted and sign-in is never locked, so
+   * this is purely an upgrade cleanup: it makes sure a lockout written by an
+   * older build can never be honoured again.
+   */
   clearAttempts(): void {
-    memoryAttempts = null;
     if (!enabled) return;
     try {
       window.localStorage.removeItem(ATTEMPTS_KEY);

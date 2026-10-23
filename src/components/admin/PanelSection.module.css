@@ -427,3 +427,16 @@
   color: var(--color-text-muted);
   font-family: var(--font-mono);
 }
+
+/* ---------- Dashboard banner (Appearance) ---------- */
+
+/* Wide preview of the banner exactly as the dashboard crops it. */
+.bannerPreview {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 5;
+  object-fit: cover;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface-muted);
+}

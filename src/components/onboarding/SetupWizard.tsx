@@ -164,14 +164,15 @@ export function SetupWizard({ onFinish }: SetupWizardProps) {
         {step === 1 ? (
           <div className={styles.body}>
             <p className={styles.text}>
-              This wizard configures a new installation: the restaurant profile,
-              tax and your own administrator password. Existing data is never
-              changed, and the wizard does not open again once completed.
+              This wizard configures a new installation: the restaurant profile
+              and tax. You already created your administrator account, and an
+              optional password change is offered at the end. Existing data is
+              never changed, and the wizard does not open again once completed.
             </p>
             <ul className={styles.checklist}>
               <li>Restaurant name and contact details</li>
               <li>Tax rate and receipt footer</li>
-              <li>A secure administrator password</li>
+              <li>Optional administrator password update</li>
             </ul>
           </div>
         ) : null}

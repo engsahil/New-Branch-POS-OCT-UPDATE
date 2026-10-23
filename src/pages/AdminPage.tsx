@@ -179,7 +179,7 @@ export default function AdminPage() {
           <span>
             <span className={styles.noticeTitle}>Set your own password</span>
             <span className={styles.noticeBody}>
-              This terminal is still using its one-time setup password. Open
+              This terminal is still using its initial setup password. Open
               Security to choose your own before putting the till into use.
             </span>
           </span>

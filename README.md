@@ -67,10 +67,15 @@ capabilities below were added.
   a hero banner, KPI cards with real day-over-day deltas, a sales trend line,
   order-type and payment-method doughnuts, top selling items, recent orders
   (click to open the real receipt) and quick actions to every module.
-- **Banner image.** Settings → Restaurant has a banner picker: upload, replace,
-  preview and remove, centre-cropped to 16:5 and re-encoded before storage, so a
-  phone photo becomes a ~100 KB image in the restaurant record. A tagline line
-  can be set beside it. No banner means a plain themed header — no stock photo.
+- **Banner image.** A professional restaurant banner is built into the app
+  (bundled 1600×500 asset, precached for offline use) and shows on the
+  dashboard by default, with only the restaurant name, a "Welcome back."
+  greeting and an optional configured tagline over it — no editing controls on
+  the banner itself. Customisation lives in Settings → Appearance (wide
+  preview, upload/replace, restore default, explicit save) and in Settings →
+  Restaurant's banner picker, centre-cropped to 16:5 and re-encoded before
+  storage, so a phone photo becomes a ~100 KB image in the restaurant record.
+  Removing a custom banner restores the built-in one.
 - **Administrator menu and profile.** The header shows the account menu (My
   profile, Settings, Sign out). `/profile` shows username, role, email, phone,
   last sign-in and the restaurant, and saves display name, email and phone to
@@ -103,9 +108,10 @@ reproduced verbatim from the run, not predicted.
 | Check | Command | Result |
 | --- | --- | --- |
 | Types | `npx tsc -b --noEmit` | exit 0, no diagnostics |
-| Unit/service tests | `npm test` | 4 suites pass (IndexedDB, data port, receipts, v5.1.9) |
-| Production build | `npm run build` | typecheck + build succeed, 52 precached files |
+| Unit/service tests | `npm test` | 4 suites pass (IndexedDB, data port, receipts, v5.1.9) + auth fresh/legacy suites |
+| Production build | `npm run build` | typecheck + build succeed, 61 precached files |
 | UI smoke (development only) | `node scripts/smoke-ui.mjs` | mounts, signs in, renders 10 routes, settings/appearance save, no duplicate dashboard, bell present, wizard skipped, no console errors |
+| First-run smoke (development only) | `node scripts/smoke-setup.mjs` | fresh terminal opens Sign-Up, registration returns to Sign-In, 6 wrong passwords retryable with no cooldown, built-in banner with no overlay, Settings banner card, sign-out/returning-user guards |
 
 `npm test` is dependency-free and offline. The UI smoke run needs two
 development-only packages that are **not** in `package.json`:
@@ -116,6 +122,11 @@ VITE_ADMIN_PASSWORD=smoke-test-password npm run build   # throwaway build
 node scripts/smoke-ui.mjs
 npm run build                                          # rebuild without the test password
 ```
+
+`node scripts/smoke-setup.mjs` runs against the final normal `npm run build`
+output above (never the throwaway provisioned build): it starts from an empty
+database, completes the first-run Sign-Up through the real form, and checks
+the no-cooldown, banner and returning-user behaviour listed in the table.
 
 The smoke run loads the built bundle in Happy DOM against a fake IndexedDB,
 signs in through the real form, then visits `/dashboard`, `/sales`,
@@ -210,7 +221,7 @@ src/
     app.config.ts        version, locale, CURRENCY (PKR only)
     license.config.ts    licence public key, policy, optional API URL
     sync.config.ts       sync endpoint, batching, backoff
-    auth.config.ts       bootstrap credentials, session & lockout policy
+    auth.config.ts       provisioning, session & password policy
     storage.config.ts    DB name/version, object stores & indexes
   data/
     db/indexedDb.ts      promise wrapper over IndexedDB
@@ -429,12 +440,14 @@ A bundled application cannot keep a secret: anything read through
 audit confirmed the previous build shipped the admin password in
 `dist/assets/index-*.js`.
 
-The application no longer ships one. On first run it generates a random
-one-time setup password with the CSPRNG, displays it on the sign-in screen,
-stores only its PBKDF2 hash, and requires the operator to set their own
-password. `VITE_ADMIN_PASSWORD` is still honoured for test automation and
-kiosk provisioning, and `.env.example` states plainly that anything set there
-is readable by anyone.
+The application no longer ships one. On first run it opens a one-time
+Sign-Up screen where the operator creates the administrator account and sets
+their own password; only its PBKDF2 hash is stored. Registration then returns
+to Sign-In — it never opens the dashboard by itself — and once an account
+exists the Sign-Up screen is closed for good. `VITE_ADMIN_PASSWORD` is still
+honoured for test automation and kiosk provisioning (seeding a
+must-change-password account), and `.env.example` states plainly that
+anything set there is readable by anyone.
 
 ### Session tokens are bound to the account
 
@@ -1132,11 +1145,24 @@ one self-contained row with no separate blob store to keep in sync.
 
 ## Authentication
 
-Admin sign-in gates the entire application; every route except `/login` is
-wrapped in `RequireAuth`.
+Admin sign-in gates the entire application; every route except `/login` and
+the one-time `/setup` is wrapped in `RequireAuth`.
+
+**First run is Sign-Up, not Sign-In.** Whether an account exists is read from
+the persisted credential record in IndexedDB, never a frontend flag. With no
+account, `RequireAuth` routes to `/setup`, where the operator creates the
+single administrator account (`authService.createInitialAdmin()`: validated,
+PBKDF2-hashed, written atomically with `add` so simultaneous submissions
+cannot both win, then re-read to verify). Success redirects to `/login` with
+"Account created successfully. Please sign in." — registration creates no
+session. Afterwards `/setup` redirects to `/login`, so there is no open
+public registration. Existing accounts (including older ones still flagged
+`mustChangePassword`) are recognised as set up and are never sent to Sign-Up
+or replaced by it.
 
 **Credentials are configurable.** `VITE_ADMIN_USERNAME` / `VITE_ADMIN_PASSWORD`
-in `.env` seed the account on first run only. After that the credentials live
+in `.env` seed a must-change-password account on first run only (test
+automation / kiosk provisioning). After that the credentials live
 in the local database and are changed at runtime via
 `authService.changeCredentials()` — editing `.env` later will not reset a live
 account. `.env` is git-ignored; `.env.example` documents the format.
@@ -1152,8 +1178,15 @@ keeps the operator signed in, and expire after 12 hours.
 
 **Hardening.** Login failures always return one generic message so the response
 cannot be used to enumerate usernames; both the username and password checks
-always run so timing cannot reveal which failed; five consecutive failures
-trigger a one-minute lockout.
+always run so timing cannot reveal which failed. There is deliberately **no
+timed cooldown or lockout after a wrong password**: the attempt is rejected
+and the operator may retry immediately. The earlier five-failures/one-minute
+lockout was a `localStorage` timer that anyone with physical access to the
+terminal could clear, so it only locked out legitimate operators; what slows
+guessing is the 150,000-iteration PBKDF2 verification paid on every attempt,
+which cannot be switched off. Wrong credentials still never authenticate, and
+a stale lockout record left by an older build is deleted on startup/sign-in
+so an upgrade frees anyone who was mid-lockout.
 
 ## Key decisions
 
@@ -1595,7 +1628,9 @@ Security and data-integrity audit (Step 19):
 | MED | Absurd quantity (1e9) accepted | Bounded |
 
 Verified after the fixes: forged, expired and wrong-user sessions are all
-rejected; lockout still triggers after repeated failures; junk, empty and
+rejected; repeated wrong passwords are always rejected but retryable
+immediately (the one-minute lockout was later removed as a client-side timer
+with no real protective value — see Authentication); junk, empty and
 unsigned licence keys are rejected; admin credentials are stored as
 PBKDF2-SHA256 with a 150,000-iteration salt and no plaintext; queued sync
 payloads carry no password, salt, session token or licence key; and every

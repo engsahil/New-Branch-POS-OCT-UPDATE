@@ -95,7 +95,7 @@ export function SecuritySection() {
     <form className={styles.form} onSubmit={handleSubmit} noValidate>
       {user?.mustChangePassword ? (
         <p className={styles.warn} role="status">
-          This terminal is still using its one-time setup password. Set your
+          This terminal is still using its initial setup password. Set your
           own password below.
         </p>
       ) : null}

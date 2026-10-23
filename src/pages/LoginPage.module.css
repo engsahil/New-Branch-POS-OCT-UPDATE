@@ -91,7 +91,13 @@
 .reveal {
   position: absolute;
   right: var(--sp-1);
-  bottom: 0;
+  /*
+   * Anchored under the label rather than to the bottom of the wrapper, so
+   * the toggle stays inside the input row whether or not the field shows a
+   * hint or validation message underneath. The offset mirrors the Input
+   * label metrics (one line at --lh-normal plus the wrapper gap).
+   */
+  top: calc(var(--fs-sm) * var(--lh-normal) + var(--sp-2));
   display: grid;
   place-items: center;
   width: 38px;
@@ -161,41 +167,22 @@
   }
 }
 
-/* ---------- First-run setup password ---------- */
+/* ---------- Success / informational notice ---------- */
 
-.setup {
+.notice {
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
   gap: var(--sp-2);
-  padding: var(--sp-4);
+  padding: var(--sp-3);
   margin-bottom: var(--sp-5);
-  background-color: var(--color-warning-soft);
-  border: 1px solid color-mix(in srgb, var(--color-warning) 30%, transparent);
   border-radius: var(--radius-md);
-}
-
-.setupTitle {
+  background-color: var(--color-success-soft);
+  color: var(--color-success);
   font-size: var(--fs-sm);
-  font-weight: var(--fw-semibold);
-  color: var(--c-ink-800);
-}
-
-.setupBody {
-  font-size: var(--fs-xs);
   line-height: var(--lh-snug);
-  color: var(--c-ink-700);
 }
 
-.setupCode {
-  font-family: var(--font-mono);
-  font-size: var(--fs-lg);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--tracking-wide);
-  color: var(--color-text);
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-sm);
-  padding: var(--sp-2) var(--sp-3);
-  text-align: center;
-  user-select: all;
+.noticeIcon {
+  flex-shrink: 0;
+  margin-top: 1px;
 }

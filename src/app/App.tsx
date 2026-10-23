@@ -8,6 +8,7 @@ import { RequireAuth } from './RequireAuth';
 import { appRoutes } from './routes';
 
 const LoginPage = lazy(() => import('@/pages/LoginPage'));
+const SetupPage = lazy(() => import('@/pages/SetupPage'));
 
 export default function App() {
   return (
@@ -15,8 +16,13 @@ export default function App() {
       <AuthProvider>
         <Suspense fallback={<Spinner fullscreen label="Loading" />}>
           <Routes>
-            {/* Public */}
+            {/*
+              Public. /setup is the one-time first-run Sign-Up screen; it
+              redirects to /login as soon as an account exists, so it is
+              never an open registration page.
+            */}
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/setup" element={<SetupPage />} />
 
             {/* Everything else requires an authenticated admin */}
             <Route
