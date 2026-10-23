@@ -47,6 +47,7 @@ export function Sidebar() {
                   cn(styles.link, isActive && styles.linkActive)
                 }
                 title={label}
+                data-tour={`nav-${id}`}
               >
                 <span className={styles.linkIcon}>
                   <Icon width={19} height={19} />

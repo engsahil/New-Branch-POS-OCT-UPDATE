@@ -31,6 +31,9 @@ const allStores = [
   'toppings',
   'addOns',
   'settings',
+  'notifications',
+  'receiptAudits',
+  'purchases',
   'syncQueue',
 ];
 const backupStores = allStores.filter((name) => !['admin', 'syncQueue'].includes(name));
@@ -47,10 +50,11 @@ const config = {
   applicationVersion: '3.1.0',
   dataSchemaVersion: 1,
   databaseName: 'pos-db',
-  databaseVersion: 6,
+  databaseVersion: 7,
   allStores,
   backupStores,
   legacyBackupStores,
+  optionalStores: ['notifications', 'receiptAudits', 'purchases'],
   excludedStores,
   orderSequenceSettingId: 'order.sequence',
   uniqueIndexes: { orders: 'orderNumber', sales: 'orderId' },
@@ -455,6 +459,38 @@ delete missingStore.stores.inventory;
 assert.throws(() => untouchedService.previewBackup(missingStore), /manifest/i);
 for (const name of allStores) assert.deepEqual(untouchedDb.data.get(name), beforeInvalid[name]);
 assert.equal(untouchedDb.transactionCount, 0);
+
+// A backup exported by the 3.x release predates the notification and audit
+// stores. It must still restore without being rejected for missing stores.
+const preUpgrade = structuredClone(fileRoundTrip);
+preUpgrade.application.version = '3.1.0';
+preUpgrade.source.databaseVersion = 6;
+preUpgrade.schema.databaseVersion = 6;
+preUpgrade.schema.stores = preUpgrade.schema.stores.filter(
+  (name) => !['notifications', 'receiptAudits'].includes(name),
+);
+delete preUpgrade.stores.notifications;
+delete preUpgrade.stores.receiptAudits;
+const upgradeDb = new MemoryPortDatabase({});
+const upgradeService = serviceFor(upgradeDb);
+const upgradePreview = upgradeService.previewBackup(preUpgrade);
+assert.ok(upgradePreview.totalRecords > 0, 'pre-upgrade backup previews');
+const upgradeImport = await upgradeService.importBackup(preUpgrade);
+assert.equal(
+  upgradeImport.added,
+  upgradePreview.totalRecords,
+  'a pre-v5.1.9 backup restores every record it contains',
+);
+assert.deepEqual(
+  await upgradeDb.getAll('orders'),
+  preUpgrade.stores.orders,
+  'pre-upgrade order records restore unchanged',
+);
+assert.deepEqual(
+  await upgradeDb.getAll('notifications'),
+  [],
+  'stores introduced later start empty without failing the restore',
+);
 
 // Import the old v1 shape emitted by the previous release; keep its credential local.
 const legacyStores = { ...structuredClone(fileRoundTrip.stores), admin: [localAdmin] };

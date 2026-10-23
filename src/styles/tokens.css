@@ -1,88 +1,95 @@
 /* ============================================================
    Design tokens — single source of truth for the visual system.
-   Palette: white surfaces on warm beige/cream, with an espresso
-   ink for text and a deep bronze for primary actions. Warm
-   neutrals only — no cool greys — so the interface reads as
-   calm and premium. Colour is reserved for primary actions,
-   selected states, status and small accents.
+
+   Theme: "Light Clean & Fresh" (v5.1.9).
+   White cards on a subtle mint-tinted off-white background with a
+   deep restaurant green for primary actions. Colour is reserved for
+   actions, selected states, status and small accents.
+
+   The primitive names below are the historical ones (cream/sand/
+   taupe/ink/bronze). They are kept so module stylesheets that
+   reference them keep working, but every value now belongs to the
+   Light Clean & Fresh palette.
    ============================================================ */
 
 :root {
-  /* --- Neutral primitives (warm) --- */
+  /* --- Neutral primitives --- */
   --c-white: #ffffff;
-  --c-cream-50: #fdfcfa;
-  --c-cream-100: #faf8f4;
-  --c-cream-200: #f5f1ea;
-  --c-cream-300: #ece6db;
-  --c-sand-300: #e3dbcd;
-  --c-sand-400: #d5caba;
-  /* Taupes are tuned so muted/faint text clears WCAG AA (4.5:1)
-     on every surface in the palette, including cream-200. */
-  --c-taupe-300: #b3a795;
-  /* 400 and 500 are close by design: both must clear WCAG AA on cream and
-     accent-soft surfaces. The scale darkens monotonically. */
-  --c-taupe-400: #6f6558;
-  --c-taupe-500: #6b6154;
-  --c-taupe-600: #5d5449;
-  --c-ink-700: #4a423a;
-  --c-ink-800: #2c2621;
-  --c-ink-900: #1b1714;
+  --c-cream-50: #ffffff;
+  --c-cream-100: #f7faf8; /* page background */
+  --c-cream-200: #f0f5f2; /* muted surface */
+  --c-cream-300: #dce7e1; /* border */
+  --c-sand-300: #cfded7;
+  --c-sand-400: #b9ccc3;
+  /* Muted text: 4.6:1 or better on every surface above. */
+  --c-taupe-300: #cfe0d8; /* used for hairlines and inactive dots */
+  --c-taupe-400: #5a6b62; /* secondary text */
+  --c-taupe-500: #5a6b62;
+  --c-taupe-600: #4a5a52;
+  --c-ink-700: #2f4038;
+  --c-ink-800: #172923;
+  --c-ink-900: #10201a;
 
-  /* --- Accent primitives --- */
-  --c-bronze-400: #c2a173;
-  --c-bronze-500: #a8814f;
-  --c-bronze-600: #8c6a3f;
-  --c-bronze-700: #755835;
+  /* --- Accent primitives (restaurant green) --- */
+  --c-green-50: #f1faf5;
+  --c-green-100: #e4f4ec;
+  --c-green-300: #9fd2bb;
+  --c-green-400: #25845f;
+  --c-green-500: #1c7a56;
+  --c-green-600: #176b4d;
+  --c-green-700: #12573e;
+  --c-green-900: #0d3f2d;
 
-  /* --- Status primitives (desaturated to sit on cream) --- */
-  --c-green-500: #3f6b4a;
-  --c-green-100: #e7efe7;
-  --c-amber-500: #b5822e;
-  --c-amber-100: #f7eeda;
-  --c-red-500: #a84b3c;
-  --c-red-100: #f6e5e1;
-  --c-blue-500: #4a6b8a;
-  --c-blue-100: #e6edf3;
+  /* --- Status primitives --- */
+  --c-success-500: #168653;
+  --c-success-100: #e2f5ea;
+  --c-amber-500: #a8741a;
+  --c-amber-100: #fbf1dd;
+  --c-red-500: #c03636;
+  --c-red-100: #fbeaea;
+  --c-blue-500: #2a6690;
+  --c-blue-100: #e8f1f7;
 
   /* --- Semantic surfaces --- */
   --color-bg: var(--c-cream-100);
   --color-surface: var(--c-white);
-  --color-surface-alt: var(--c-cream-50);
+  --color-surface-alt: #fbfdfc;
   --color-surface-sunken: var(--c-cream-200);
   --color-surface-raised: var(--c-white);
+  --color-surface-muted: #f0f5f2;
 
   --color-border: var(--c-cream-300);
-  --color-border-subtle: var(--c-cream-200);
+  --color-border-subtle: #e8f0ec;
   --color-border-strong: var(--c-sand-300);
 
   /* --- Semantic text --- */
-  --color-text: var(--c-ink-900);
+  --color-text: var(--c-ink-800);
   --color-text-secondary: var(--c-ink-700);
   --color-text-muted: var(--c-taupe-400);
   --color-text-faint: var(--c-taupe-500);
-  --color-text-inverse: var(--c-cream-50);
+  --color-text-inverse: #ffffff;
 
   /* --- Interactive --- */
   /*
-   * Primary actions are deep bronze — the one clearly coloured element on
-   * an otherwise black/white/cream screen. Cream text on bronze-600 clears
-   * WCAG AA (4.9:1); bronze-700 is darker still for hover.
+   * Primary actions are deep restaurant green. White text on green-600
+   * clears WCAG AA comfortably (6.6:1); green-700 is darker for hover.
    */
-  --color-primary: var(--c-bronze-600);
-  --color-primary-hover: var(--c-bronze-700);
-  --color-primary-contrast: var(--c-cream-50);
+  --color-primary: var(--c-green-600);
+  --color-primary-hover: var(--c-green-700);
+  --color-primary-contrast: #ffffff;
 
-  --color-accent: var(--c-bronze-500);
-  --color-accent-hover: var(--c-bronze-600);
-  --color-accent-soft: #f3ead9;
+  --color-accent: var(--c-green-500);
+  --color-accent-hover: var(--c-green-600);
+  --color-accent-soft: var(--c-green-100);
+  --color-accent-soft-strong: #d5ebdf;
 
-  --color-hover: var(--c-cream-200);
-  --color-active: var(--c-cream-300);
-  --color-selected: var(--c-white);
+  --color-hover: #f0f6f3;
+  --color-active: #e4f4ec;
+  --color-selected: #f1faf5;
 
   /* --- Status --- */
-  --color-success: var(--c-green-500);
-  --color-success-soft: var(--c-green-100);
+  --color-success: var(--c-success-500);
+  --color-success-soft: var(--c-success-100);
   --color-warning: var(--c-amber-500);
   --color-warning-soft: var(--c-amber-100);
   --color-danger: var(--c-red-500);
@@ -90,10 +97,29 @@
   --color-info: var(--c-blue-500);
   --color-info-soft: var(--c-blue-100);
 
-  --color-focus-ring: var(--c-bronze-500);
-  --color-overlay: rgb(27 23 20 / 32%);
+  /* --- Accent support colours (charts, status, highlights) --- */
+  --color-accent-orange: #f59e0b;
+  --color-accent-blue: #2583d8;
+  --color-accent-gold: #d9a441;
+  --color-accent-orange-soft: #fdf3e3;
+  --color-accent-blue-soft: #e8f2fc;
+  --color-accent-gold-soft: #faf3e3;
 
-  /* --- Typography --- */
+  /* Chart series: ordered, colour-blind-safe against the light surfaces. */
+  --chart-1: #176b4d;
+  --chart-2: #2583d8;
+  --chart-3: #f59e0b;
+  --chart-4: #25845f;
+  --chart-5: #d9a441;
+  --chart-grid: #e8f0ec;
+
+  --color-focus-ring: var(--c-green-500);
+  --color-overlay: rgb(13 32 26 / 38%);
+
+  /* --- Typography ---
+     The existing system UI stack is preserved: it is already available on
+     every target platform, renders receipts reliably and needs no download.
+  */
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Inter',
     'Helvetica Neue', Arial, sans-serif;
@@ -144,14 +170,14 @@
   --radius-xl: 16px;
   --radius-full: 9999px;
 
-  /* --- Elevation (warm-tinted, very restrained) --- */
-  --shadow-xs: 0 1px 2px rgb(27 23 20 / 4%);
+  /* --- Elevation (very restrained, green-tinted) --- */
+  --shadow-xs: 0 1px 2px rgb(16 32 26 / 4%);
   --shadow-sm:
-    0 1px 2px rgb(27 23 20 / 5%), 0 1px 3px rgb(27 23 20 / 3%);
+    0 1px 2px rgb(16 32 26 / 5%), 0 1px 3px rgb(16 32 26 / 3%);
   --shadow-md:
-    0 2px 4px rgb(27 23 20 / 4%), 0 4px 12px rgb(27 23 20 / 6%);
+    0 2px 4px rgb(16 32 26 / 4%), 0 4px 12px rgb(16 32 26 / 6%);
   --shadow-lg:
-    0 4px 8px rgb(27 23 20 / 5%), 0 12px 32px rgb(27 23 20 / 9%);
+    0 4px 8px rgb(16 32 26 / 5%), 0 12px 32px rgb(16 32 26 / 9%);
 
   /* --- Motion --- */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -162,7 +188,7 @@
   --dur-slow: 320ms;
 
   /* --- Layout --- */
-  --layout-sidebar-w: 244px;
+  --layout-sidebar-w: 224px;
   --layout-rail-w: 80px;
   --layout-tabbar-h: 62px;
   --layout-content-max: 1360px;

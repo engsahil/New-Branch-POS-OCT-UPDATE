@@ -19,19 +19,32 @@ import styles from './PanelSection.module.css';
  */
 export function PrinterSection() {
   const [width, setWidth] = useState<ReceiptWidth | null>(null);
+  const [showLogo, setShowLogo] = useState(true);
   const [support, setSupport] = useState<TransportSupport | null>(null);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     let active = true;
-    void receiptService.getWidth().then((w) => {
-      if (active) setWidth(w);
+    void Promise.all([
+      receiptService.getWidth(),
+      receiptService.getShowLogo(),
+    ]).then(([w, logo]) => {
+      if (!active) return;
+      setWidth(w);
+      setShowLogo(logo);
     });
     setSupport(printerService.detectSupport());
     return () => {
       active = false;
     };
   }, []);
+
+  async function toggleLogo(next: boolean) {
+    setShowLogo(next);
+    await receiptService.setShowLogo(next);
+    setSaved(true);
+    window.setTimeout(() => setSaved(false), 2500);
+  }
 
   async function choose(next: ReceiptWidth) {
     setWidth(next);
@@ -76,6 +89,30 @@ export function PrinterSection() {
             </button>
           ))}
         </div>
+      </section>
+
+      <section className={styles.card}>
+        <div className={styles.cardHead}>
+          <h3 className={styles.cardTitle}>Customer receipt</h3>
+          <span className={styles.status} aria-live="polite">
+            {saved ? 'Saved' : ''}
+          </span>
+        </div>
+        <label className={styles.toggleRow}>
+          <input
+            type="checkbox"
+            name="showReceiptLogo"
+            className={styles.checkbox}
+            checked={showLogo}
+            onChange={(event) => void toggleLogo(event.target.checked)}
+          />
+          <span>
+            <span className={styles.toggleLabel}>Print the restaurant logo</span>
+            <span className={styles.toggleHint}>
+              Logo and contact details come from the Restaurant Profile.
+            </span>
+          </span>
+        </label>
       </section>
 
       <section className={styles.card}>

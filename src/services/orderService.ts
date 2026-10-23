@@ -12,6 +12,7 @@ import { STORES } from '@/config/storage.config';
 import { db } from '@/data/db/indexedDb';
 import { trackChange } from '@/data/repositories/changeTracker';
 import {
+  customersRepository,
   dealsRepository,
   orderItemsRepository,
   ordersRepository,
@@ -19,6 +20,7 @@ import {
 } from '@/data/repositories';
 import { getTaxConfig } from './restaurantService';
 import { customerService } from './customerService';
+import { notificationService } from './notificationService';
 import { settingsService, SETTING_KEYS } from './settingsService';
 import { syncQueueService } from './syncQueueService';
 import type {
@@ -270,6 +272,12 @@ export interface CompleteOrderInput {
   tableLabel?: string;
   customerName?: string;
   customerPhone?: string;
+  /**
+   * Customer chosen from the saved-customer picker. When set, that record is
+   * linked directly and its stored details fill any field the operator left
+   * blank — so picking a customer never creates a duplicate record.
+   */
+  customerId?: ID | null;
   note?: string;
   deliveryAddress?: string;
   deliveryNotes?: string;
@@ -351,16 +359,37 @@ export const orderService = {
       ? input.deliveryNotes.trim().slice(0, 500)
       : undefined;
 
-    if (orderType === 'delivery' && !deliveryAddress) {
+    /*
+     * Customer resolution, in order of precedence:
+     *  1. an explicitly selected saved customer (linked as-is, never cloned),
+     *  2. an existing record matched by phone then exact name, or
+     *  3. a new record created from whatever checkout captured.
+     * Guest orders (no name and no phone) stay unlinked.
+     */
+    const selectedCustomer = input.customerId
+      ? await customersRepository.getById(input.customerId)
+      : undefined;
+
+    const resolvedName =
+      customerName ?? selectedCustomer?.name?.trim() ?? undefined;
+    const resolvedPhone =
+      customerPhone ?? selectedCustomer?.phone?.trim() ?? undefined;
+
+    const customer = selectedCustomer
+      ? selectedCustomer
+      : await customerService.upsertFromCheckout({
+          name: resolvedName,
+          phone: resolvedPhone,
+        });
+
+    const effectiveName = resolvedName ?? selectedCustomer?.name ?? undefined;
+    const effectivePhone = resolvedPhone ?? selectedCustomer?.phone ?? undefined;
+    const effectiveAddress =
+      deliveryAddress ?? selectedCustomer?.address?.trim() ?? undefined;
+
+    if (orderType === 'delivery' && !effectiveAddress) {
       throw new ValidationError('Delivery address is required.');
     }
-
-    // Reuse the customer's existing record (matched by phone, then exact
-    // name) or create one — checkout itself stays a single step.
-    const customer = await customerService.upsertFromCheckout({
-      name: customerName,
-      phone: customerPhone,
-    });
 
     const order: OrderRecord = {
       id: orderId,
@@ -375,13 +404,13 @@ export const orderService = {
       amountPaid,
       changeDue: Math.max(0, amountPaid - totals.grandTotal),
       tableLabel,
-      customerName,
-      customerPhone,
+      customerName: effectiveName,
+      customerPhone: effectivePhone,
       customerId: customer?.id ?? null,
       note,
       ...(orderType === 'delivery'
         ? {
-            deliveryAddress,
+            deliveryAddress: effectiveAddress,
             deliveryNotes,
             deliveryStatus: 'pending' as const,
             assignedRiderId: null,
@@ -440,6 +469,7 @@ export const orderService = {
       grandTotal: totals.grandTotal,
       paymentMethod,
       itemCount: totals.itemCount,
+      orderType,
       customerId: customer?.id ?? null,
       refundedAt: null,
       cancelledAt: null,
@@ -535,11 +565,54 @@ export const orderService = {
         await trackChange(STORES.inventory, updated.id, 'update', updated);
       }
 
-      void import('./sync/syncEngine').then(({ syncEngine }) => {
-        void syncEngine.refresh();
-      });
+      void import('./sync/syncEngine')
+        .then(({ syncEngine }) => {
+          void syncEngine.refresh();
+        })
+        .catch(() => {
+          /* the order is stored; a background sync module failure is not fatal */
+        });
     } catch {
       /* the order is safely stored; sync can be reconciled later */
+    }
+
+    /*
+     * Notifications are written after the sale has committed, and never throw
+     * back into checkout: a failed notification must not undo a paid order.
+     */
+    const orderLabel = `${orderType === 'delivery' ? 'Delivery' : orderType === 'dine-in' ? 'Dine-in' : 'Takeaway'} order #${order.orderNumber}`;
+    await notificationService.create({
+      key: `order:${order.id}`,
+      kind: 'order',
+      title: `${orderLabel} completed`,
+      body: `Rs. ${(order.grandTotal / 100).toFixed(2)} · ${order.paymentMethod ?? 'cash'}`,
+      link: '/sales',
+    });
+
+    for (const line of stockWrites) {
+      if (line.isOutOfStock === 1) {
+        await notificationService.create({
+          key: `stock:${line.id}:out-of-stock`,
+          kind: 'stock',
+          severity: 'critical',
+          title: `${line.name} is out of stock`,
+          body: 'Linked menu items are hidden from the POS until restocked.',
+          link: '/inventory',
+        });
+      } else if (
+        line.reorderLevel !== null &&
+        line.reorderLevel !== undefined &&
+        line.quantity <= line.reorderLevel
+      ) {
+        await notificationService.create({
+          key: `stock:${line.id}:low-stock`,
+          kind: 'stock',
+          severity: 'warning',
+          title: `${line.name} is low on stock`,
+          body: `${line.quantity} ${line.unit} left · reorder level ${line.reorderLevel}`,
+          link: '/inventory',
+        });
+      }
     }
 
     return { order, items, sale };
@@ -653,6 +726,15 @@ export const orderService = {
       },
     );
 
+    await notificationService.create({
+      key: `void:${cancelled.id}`,
+      kind: 'audit',
+      severity: 'warning',
+      title: `Order #${cancelled.orderNumber} was cancelled`,
+      body: 'The sale is excluded from totals and its stock has been restored.',
+      link: '/sales',
+    });
+
     try {
       await trackChange(STORES.orders, cancelled.id, 'update', cancelled);
       if (sale) {
@@ -679,12 +761,83 @@ export const orderService = {
     return orderItemsRepository.findByIndex('by_orderId', orderId);
   },
 
+  /**
+   * Full order history with the matching sale row, newest first.
+   *
+   * Used by the Sales screen and receipt history. The list is read in one
+   * pass and joined in memory; a single restaurant's history fits comfortably
+   * in memory and this avoids a query per order.
+   */
+  async history(): Promise<Array<{ order: OrderRecord; sale?: SaleRecord }>> {
+    const [orders, sales] = await Promise.all([
+      ordersRepository.list(),
+      salesRepository.list(),
+    ]);
+    const saleByOrder = new Map(sales.map((sale) => [sale.orderId, sale]));
+    return orders
+      .sort((a, b) =>
+        (b.completedAt ?? b.createdAt).localeCompare(
+          a.completedAt ?? a.createdAt,
+        ),
+      )
+      .map((order) => ({ order, sale: saleByOrder.get(order.id) }));
+  },
+
   async recentOrders(limit = 20): Promise<OrderRecord[]> {
     const orders = await ordersRepository.list();
     return orders
       .filter((order) => order.status === 'completed')
       .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''))
       .slice(0, limit);
+  },
+
+  /**
+   * Operational figures for the dashboard, all derived from stored orders.
+   *
+   *  - dineInTables: distinct table labels used by dine-in orders today,
+   *  - pendingDeliveries: delivery orders not yet delivered or cancelled,
+   *  - unpaidOrders: completed orders where less than the total was taken.
+   * Nothing is inferred: an empty database reports zero.
+   */
+  async dayStats(todayKey: string): Promise<{
+    dineInTables: number;
+    pendingDeliveries: number;
+    unpaidOrders: number;
+    todayOrders: number;
+  }> {
+    const orders = await ordersRepository.list();
+    const today = orders.filter((order) => {
+      const at = order.completedAt ?? order.createdAt;
+      return (at ?? '').slice(0, 10) === todayKey;
+    });
+
+    const tables = new Set(
+      today
+        .filter((order) => order.orderType === 'dine-in' && order.tableLabel)
+        .map((order) => order.tableLabel as string),
+    );
+
+    const pendingDeliveries = orders.filter(
+      (order) =>
+        order.orderType === 'delivery' &&
+        order.status === 'completed' &&
+        order.deliveryStatus !== 'delivered' &&
+        order.deliveryStatus !== 'cancelled',
+    ).length;
+
+    const unpaidOrders = today.filter(
+      (order) =>
+        order.status === 'completed' &&
+        typeof order.amountPaid === 'number' &&
+        order.amountPaid < order.grandTotal,
+    ).length;
+
+    return {
+      dineInTables: tables.size,
+      pendingDeliveries,
+      unpaidOrders,
+      todayOrders: today.filter((order) => order.status === 'completed').length,
+    };
   },
 
   async count(): Promise<number> {

@@ -3,7 +3,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import {
   AboutSection,
   AdminNav,
-  DashboardSection,
+  AppearanceSection,
   InstallSection,
   ManageLinkSection,
   PrinterSection,
@@ -24,13 +24,13 @@ import { useMenu } from '@/hooks/useMenu';
 import styles from './AdminPage.module.css';
 
 const SECTIONS: AdminSection[] = [
-  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'restaurant', label: 'Restaurant' },
+  { id: 'appearance', label: 'Appearance' },
   { id: 'menu', label: 'Menu' },
   { id: 'inventory', label: 'Inventory' },
   { id: 'deals', label: 'Deals' },
   { id: 'toppings', label: 'Toppings' },
   { id: 'addons', label: 'Add-ons' },
-  { id: 'restaurant', label: 'Restaurant Profile' },
   { id: 'printer', label: 'Printer' },
   { id: 'install', label: 'Install' },
   { id: 'security', label: 'Security' },
@@ -52,9 +52,9 @@ export default function AdminPage() {
       const stored = window.sessionStorage.getItem(SECTION_STORAGE_KEY);
       return stored && SECTIONS.some((s) => s.id === stored)
         ? stored
-        : 'dashboard';
+        : 'restaurant';
     } catch {
-      return 'dashboard';
+      return 'restaurant';
     }
   });
 
@@ -112,7 +112,7 @@ export default function AdminPage() {
   );
 
   const panels: Record<string, React.ReactNode> = {
-    dashboard: <DashboardSection />,
+    appearance: <AppearanceSection onOpenSection={setActive} />,
     menu: (
       <ManageLinkSection
         title="Menu"
@@ -151,13 +151,13 @@ export default function AdminPage() {
   };
 
   const activeLabel =
-    SECTIONS.find((s) => s.id === active)?.label ?? 'Dashboard';
+    SECTIONS.find((s) => s.id === active)?.label ?? 'Restaurant';
 
   return (
     <div className="page">
       <PageHeader
-        title="Admin"
-        subtitle="Configure this terminal."
+        title="Settings"
+        subtitle="Restaurant, appearance and terminal configuration."
         actions={
           <Button
             variant="secondary"

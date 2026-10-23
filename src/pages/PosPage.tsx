@@ -4,6 +4,7 @@ import { ROUTE_PATHS } from '@/app/routes';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
   CartPanel,
+  CustomerPicker,
   DealGrid,
   ItemGrid,
   OrderConfirmation,
@@ -19,7 +20,7 @@ import { useMenu } from '@/hooks/useMenu';
 import { orderService, type CompletedOrder } from '@/services/orderService';
 import { restaurantService } from '@/services/restaurantService';
 import { SETTING_KEYS, settingsService } from '@/services/settingsService';
-import type { OrderType } from '@/types/domain';
+import type { CustomerRecord, OrderType } from '@/types/domain';
 import type { CartCompletionInput } from '@/components/pos/CartPanel';
 import styles from './PosPage.module.css';
 
@@ -46,7 +47,9 @@ export default function PosPage() {
   const [tableLabel, setTableLabel] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerRecord | null>(
+    null,
+  );
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [deliveryNotes, setDeliveryNotes] = useState('');
   const [businessBranding, setBusinessBranding] = useState<{
@@ -89,12 +92,18 @@ export default function PosPage() {
   const hasSellable = items.length > 0 || deals.length > 0;
   const nothingMatched = visible.length === 0 && visibleDeals.length === 0;
 
-  function handleCustomerSelect(customerId: string): void {
-    setSelectedCustomerId(customerId);
-    const customer = customers.find((entry) => entry.id === customerId);
-    setCustomerName(customer?.name ?? '');
-    setCustomerPhone(customer?.phone ?? '');
-    setDeliveryAddress(customer?.address ?? '');
+  /**
+   * Selecting a saved customer fills the order fields from that record.
+   * Order type changes keep the selection, so switching from Takeaway to
+   * Delivery never loses the details already entered.
+   */
+  function handleCustomerSelect(customer: CustomerRecord | null): void {
+    setSelectedCustomer(customer);
+    if (!customer) return;
+    setCustomerName(customer.name ?? '');
+    setCustomerPhone(customer.phone ?? '');
+    // Replace the address rather than leaving the previous customer's one.
+    setDeliveryAddress(customer.address ?? '');
   }
 
   function handleSelect(
@@ -139,6 +148,7 @@ export default function PosPage() {
         tableLabel: orderType === 'dine-in' ? tableLabel.trim() : undefined,
         customerName: customerName.trim() || undefined,
         customerPhone: customerPhone.trim() || undefined,
+        customerId: selectedCustomer?.id ?? null,
         deliveryAddress: orderType === 'delivery' ? deliveryAddress : undefined,
         deliveryNotes: orderType === 'delivery' ? deliveryNotes : undefined,
       });
@@ -239,8 +249,8 @@ export default function PosPage() {
               ))}
             </div>
 
-            {orderType === 'dine-in' ? (
-              <div className={styles.orderDetails}>
+            <div className={styles.orderDetails}>
+              {orderType === 'dine-in' ? (
                 <Input
                   name="tableLabel"
                   label="Table number"
@@ -248,80 +258,65 @@ export default function PosPage() {
                   value={tableLabel}
                   onChange={(e) => setTableLabel(e.target.value)}
                 />
+              ) : null}
+
+              <CustomerPicker
+                customers={customers}
+                selected={selectedCustomer}
+                onSelect={handleCustomerSelect}
+                emptyHint={
+                  orderType === 'delivery'
+                    ? 'Optional. Pick a saved customer to fill their phone and address.'
+                    : 'Optional. Guest orders do not need a customer.'
+                }
+              />
+
+              <div className={styles.customerFields}>
                 <Input
                   name="customerName"
-                  label="Customer (optional)"
+                  label="Customer name"
                   placeholder="Customer name"
                   value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedCustomer(null);
+                    setCustomerName(e.target.value);
+                  }}
+                />
+                <Input
+                  name="customerPhone"
+                  label="Phone"
+                  placeholder="Phone"
+                  value={customerPhone}
+                  onChange={(e) => {
+                    setSelectedCustomer(null);
+                    setCustomerPhone(e.target.value);
+                  }}
                 />
               </div>
-            ) : (
-              <div className={styles.orderDetails}>
-                {orderType === 'delivery' ? (
-                  <label className={styles.selectField}>
-                    <span>Saved customer</span>
-                    <select
-                      value={selectedCustomerId}
-                      onChange={(event) => handleCustomerSelect(event.target.value)}
-                      className={styles.select}
-                      aria-label="Select an existing customer"
-                    >
-                      <option value="">Enter customer details manually</option>
-                      {customers.map((customer) => (
-                        <option key={customer.id} value={customer.id}>
-                          {customer.name}{customer.phone ? ` · ${customer.phone}` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
-                <div className={styles.customerFields}>
-                  <Input
-                    name="customerName"
-                    label="Customer name (optional)"
-                    placeholder="Customer name"
-                    value={customerName}
-                    onChange={(e) => {
-                      setSelectedCustomerId('');
-                      setCustomerName(e.target.value);
-                    }}
+
+              {orderType === 'delivery' ? (
+                <div className={styles.deliveryFields}>
+                  <Textarea
+                    name="deliveryAddress"
+                    label="Delivery address"
+                    value={deliveryAddress}
+                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    rows={2}
+                    maxLength={300}
+                    fullWidth
                   />
-                  <Input
-                    name="customerPhone"
-                    label="Phone (optional)"
-                    placeholder="Phone"
-                    value={customerPhone}
-                    onChange={(e) => {
-                      setSelectedCustomerId('');
-                      setCustomerPhone(e.target.value);
-                    }}
+                  <Textarea
+                    name="deliveryNotes"
+                    label="Special instructions (optional)"
+                    value={deliveryNotes}
+                    onChange={(e) => setDeliveryNotes(e.target.value)}
+                    rows={2}
+                    maxLength={500}
+                    fullWidth
                   />
                 </div>
-                {orderType === 'delivery' ? (
-                  <div className={styles.deliveryFields}>
-                    <Textarea
-                      name="deliveryAddress"
-                      label="Delivery address"
-                      value={deliveryAddress}
-                      onChange={(e) => setDeliveryAddress(e.target.value)}
-                      rows={2}
-                      maxLength={300}
-                      fullWidth
-                    />
-                    <Textarea
-                      name="deliveryNotes"
-                      label="Special instructions (optional)"
-                      value={deliveryNotes}
-                      onChange={(e) => setDeliveryNotes(e.target.value)}
-                      rows={2}
-                      maxLength={500}
-                      fullWidth
-                    />
-                  </div>
-                ) : null}
-              </div>
-            )}
+              ) : null}
+            </div>
 
             {nothingMatched ? (
               <EmptyState

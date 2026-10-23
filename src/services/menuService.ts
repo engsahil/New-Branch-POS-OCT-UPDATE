@@ -119,6 +119,40 @@ export interface MenuItemInput {
    */
   discountPercent?: number | null;
   prices: SizePrices;
+  sku?: string;
+  barcode?: string;
+  /** Cost per portion in paisa, or null when unrecorded. */
+  costPrice?: number | null;
+  prepMinutes?: number | null;
+  ingredients?: string;
+}
+
+/**
+ * Optional details, normalised for storage. Empty strings are stored as empty
+ * (not undefined) so an operator can clear a value they previously saved, and
+ * a negative or non-finite cost is discarded rather than stored.
+ */
+function detailsOf(input: MenuItemInput): Partial<MenuItemRecord> {
+  const prep =
+    input.prepMinutes === null || input.prepMinutes === undefined
+      ? null
+      : Number.isFinite(input.prepMinutes)
+        ? Math.max(0, Math.round(input.prepMinutes))
+        : null;
+  const cost =
+    input.costPrice === null || input.costPrice === undefined
+      ? null
+      : Number.isFinite(input.costPrice)
+        ? Math.max(0, Math.round(input.costPrice))
+        : null;
+
+  return {
+    sku: sanitiseText(input.sku ?? '', 40),
+    barcode: sanitiseText(input.barcode ?? '', 60),
+    costPrice: cost,
+    prepMinutes: prep,
+    ingredients: sanitiseText(input.ingredients ?? '', 500),
+  };
 }
 
 /** A blank item — every field empty. Used for the "Add item" form. */
@@ -131,6 +165,11 @@ export const EMPTY_MENU_ITEM: MenuItemInput = {
   variantKind: 'size',
   discountPercent: null,
   prices: { ...EMPTY_SIZE_PRICES },
+  sku: '',
+  barcode: '',
+  costPrice: null,
+  prepMinutes: null,
+  ingredients: '',
 };
 
 /**
@@ -268,6 +307,7 @@ export const menuService = {
       tracksInventory: 0,
       variantKind: input.variantKind === 'volume' ? 'volume' : 'size',
       discountPercent: sanitiseDiscount(input.discountPercent),
+      ...detailsOf(input),
     });
 
     await this.replacePrices(
@@ -291,6 +331,7 @@ export const menuService = {
       isActive: input.isActive ? 1 : 0,
       variantKind,
       discountPercent: sanitiseDiscount(input.discountPercent),
+      ...detailsOf(input),
     });
 
     await this.replacePrices(id, pricesForKind(variantKind, input.prices));

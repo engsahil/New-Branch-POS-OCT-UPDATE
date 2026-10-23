@@ -9,7 +9,7 @@
  */
 
 import { restaurantRepository } from '@/data/repositories';
-import type { RestaurantLogo, RestaurantRecord } from '@/types/domain';
+import type { RestaurantLogo, RestaurantRecord, StoredImage } from '@/types/domain';
 
 /** Fixed key for the single restaurant profile. */
 export const RESTAURANT_PROFILE_ID = 'restaurant-profile';
@@ -18,6 +18,10 @@ export const RESTAURANT_PROFILE_ID = 'restaurant-profile';
 export interface RestaurantProfileInput {
   name: string;
   logo: RestaurantLogo | null;
+  /** Optional dashboard hero image. */
+  banner: StoredImage | null;
+  /** Optional tagline; a blank string means the banner shows none. */
+  tagline: string;
   address: string;
   phone: string;
   email: string;
@@ -33,6 +37,8 @@ export interface RestaurantProfileInput {
 export const EMPTY_RESTAURANT_PROFILE: RestaurantProfileInput = {
   name: '',
   logo: null,
+  banner: null,
+  tagline: '',
   address: '',
   phone: '',
   email: '',
@@ -48,6 +54,8 @@ function normalise(input: RestaurantProfileInput): RestaurantProfileInput {
   return {
     name: input.name.trim(),
     logo: input.logo,
+    banner: input.banner,
+    tagline: input.tagline.trim().slice(0, 90),
     address: input.address.trim(),
     phone: input.phone.trim(),
     email: input.email.trim(),
@@ -78,6 +86,8 @@ export const restaurantService = {
     return {
       name: record.name ?? '',
       logo: record.logo ?? null,
+      banner: record.banner ?? null,
+      tagline: record.tagline ?? '',
       address: record.address ?? '',
       phone: record.phone ?? '',
       email: record.email ?? '',
@@ -120,6 +130,13 @@ export const restaurantService = {
     const existing = await restaurantRepository.getById(RESTAURANT_PROFILE_ID);
     if (!existing) return undefined;
     return restaurantRepository.update(RESTAURANT_PROFILE_ID, { logo: null });
+  },
+
+  /** Remove only the dashboard banner. */
+  async removeBanner(): Promise<RestaurantRecord | undefined> {
+    const existing = await restaurantRepository.getById(RESTAURANT_PROFILE_ID);
+    if (!existing) return undefined;
+    return restaurantRepository.update(RESTAURANT_PROFILE_ID, { banner: null });
   },
 };
 

@@ -17,7 +17,13 @@ import type { Paisa } from '@/types/common';
 import { ITEM_IMAGE_MAX_EDGE } from '@/utils/image';
 import styles from './MenuItemForm.module.css';
 
-type Errors = { name?: string; prices?: string; discount?: string };
+type Errors = {
+  name?: string;
+  prices?: string;
+  discount?: string;
+  costPrice?: string;
+  prepMinutes?: string;
+};
 
 export interface MenuItemFormProps {
   /** Existing item to edit, or undefined to add a new one. */
@@ -100,6 +106,11 @@ function toInput(entry: MenuItemWithPrices): MenuItemInput {
     // Includes the item's custom volume keys — the service filters labels
     // to the active kind on save, so nothing needs nulling here.
     prices: { ...entry.prices },
+    sku: entry.item.sku ?? '',
+    barcode: entry.item.barcode ?? '',
+    costPrice: entry.item.costPrice ?? null,
+    prepMinutes: entry.item.prepMinutes ?? null,
+    ingredients: entry.item.ingredients ?? '',
   };
 }
 
@@ -125,6 +136,15 @@ export function MenuItemForm({ editing, onDone, onCancel }: MenuItemFormProps) {
       editing?.item.discountPercent != null
         ? String(editing.item.discountPercent)
         : '',
+  );
+  // Cost and prep time are held as text so partial typing stays editable.
+  const [costText, setCostText] = useState(() =>
+    editing?.item.costPrice != null
+      ? (editing.item.costPrice / 100).toFixed(2)
+      : '',
+  );
+  const [prepText, setPrepText] = useState(() =>
+    editing?.item.prepMinutes != null ? String(editing.item.prepMinutes) : '',
   );
   const [errors, setErrors] = useState<Errors>({});
   const [saving, setSaving] = useState(false);
@@ -228,7 +248,26 @@ export function MenuItemForm({ editing, onDone, onCancel }: MenuItemFormProps) {
     setSaving(true);
     setFailure(null);
     try {
-      const payload: MenuItemInput = { ...values, prices, discountPercent };
+      const cost = costText.trim() === '' ? null : Math.round(Number(costText) * 100);
+      const prep = prepText.trim() === '' ? null : Number(prepText);
+      if (cost !== null && (!Number.isFinite(cost) || cost < 0)) {
+        found.costPrice = 'Enter a cost of 0 or more.';
+      }
+      if (prep !== null && (!Number.isFinite(prep) || prep < 0)) {
+        found.prepMinutes = 'Enter minutes of 0 or more.';
+      }
+      if (Object.keys(found).length > 0) {
+        setErrors(found);
+        return;
+      }
+
+      const payload: MenuItemInput = {
+        ...values,
+        prices,
+        discountPercent,
+        costPrice: cost,
+        prepMinutes: prep,
+      };
       if (editing) {
         await menuService.update(editing.item.id, payload);
       } else {
@@ -300,6 +339,78 @@ export function MenuItemForm({ editing, onDone, onCancel }: MenuItemFormProps) {
             value={values.description}
             onChange={(e) => setField('description', e.target.value)}
             rows={2}
+            fullWidth
+          />
+
+          <div className={styles.pair}>
+            <Input
+              label="SKU (optional)"
+              name="itemSku"
+              value={values.sku ?? ''}
+              onChange={(e) => setField('sku', e.target.value)}
+              maxLength={40}
+              autoComplete="off"
+              hint="Your own item code."
+              disabled={saving}
+              fullWidth
+            />
+            <Input
+              label="Barcode (optional)"
+              name="itemBarcode"
+              value={values.barcode ?? ''}
+              onChange={(e) => setField('barcode', e.target.value)}
+              maxLength={60}
+              autoComplete="off"
+              disabled={saving}
+              fullWidth
+            />
+          </div>
+
+          <div className={styles.pair}>
+            <Input
+              label={`Cost price (${CURRENCY.symbol}, optional)`}
+              name="itemCost"
+              value={costText}
+              onChange={(e) => {
+                const next = e.target.value;
+                if (next !== '' && !/^\d{0,7}(\.\d{0,2})?$/.test(next)) return;
+                setCostText(next);
+                setErrors((prev) => ({ ...prev, costPrice: undefined }));
+              }}
+              inputMode="decimal"
+              invalid={Boolean(errors.costPrice)}
+              hint={
+                errors.costPrice ??
+                'Used to show the margin against the selling price.'
+              }
+              disabled={saving}
+              fullWidth
+            />
+            <Input
+              label="Preparation time (minutes, optional)"
+              name="itemPrep"
+              value={prepText}
+              onChange={(e) => {
+                const next = e.target.value;
+                if (next !== '' && !/^\d{0,4}$/.test(next)) return;
+                setPrepText(next);
+                setErrors((prev) => ({ ...prev, prepMinutes: undefined }));
+              }}
+              inputMode="numeric"
+              invalid={Boolean(errors.prepMinutes)}
+              hint={errors.prepMinutes}
+              disabled={saving}
+              fullWidth
+            />
+          </div>
+
+          <Textarea
+            label="Ingredients (optional)"
+            name="itemIngredients"
+            value={values.ingredients ?? ''}
+            onChange={(e) => setField('ingredients', e.target.value)}
+            rows={2}
+            hint="Shown to the kitchen; not printed on the customer receipt."
             fullWidth
           />
 

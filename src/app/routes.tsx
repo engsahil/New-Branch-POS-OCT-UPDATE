@@ -8,17 +8,21 @@
 
 import { lazy, type ReactElement } from 'react';
 import {
-  AdminIcon,
   CustomersIcon,
+  DashboardIcon,
   DeliveryIcon,
   InventoryIcon,
   MenuBookIcon,
   PosIcon,
+  PurchasesIcon,
+  ReportsIcon,
   SalesIcon,
+  SettingsIcon,
   TagIcon,
 } from '@/components/ui/Icons';
 import type { NavItem } from '@/types/navigation';
 
+const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
 const PosPage = lazy(() => import('@/pages/PosPage'));
 const SalesPage = lazy(() => import('@/pages/SalesPage'));
 const CustomersPage = lazy(() => import('@/pages/CustomersPage'));
@@ -27,9 +31,12 @@ const DealsPage = lazy(() => import('@/pages/DealsPage'));
 const InventoryPage = lazy(() => import('@/pages/InventoryPage'));
 const AdminPage = lazy(() => import('@/pages/AdminPage'));
 const DeliveryPage = lazy(() => import('@/pages/DeliveryPage'));
+const PurchasesPage = lazy(() => import('@/pages/PurchasesPage'));
+const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
 export const ROUTE_PATHS = {
+  dashboard: '/dashboard',
   pos: '/',
   sales: '/sales',
   customers: '/customers',
@@ -38,6 +45,9 @@ export const ROUTE_PATHS = {
   inventory: '/inventory',
   admin: '/admin',
   deliveries: '/deliveries',
+  purchases: '/purchases',
+  reports: '/reports',
+  profile: '/profile',
 } as const;
 
 export type RoutePath = (typeof ROUTE_PATHS)[keyof typeof ROUTE_PATHS];
@@ -53,6 +63,7 @@ export interface AppRoute {
 /** Child routes rendered inside the app layout outlet. */
 export const appRoutes: AppRoute[] = [
   { id: 'pos', index: true, element: <PosPage /> },
+  { id: 'dashboard', path: 'dashboard', element: <DashboardPage /> },
   { id: 'sales', path: 'sales', element: <SalesPage /> },
   { id: 'customers', path: 'customers', element: <CustomersPage /> },
   { id: 'menu', path: 'menu', element: <MenuPage /> },
@@ -60,6 +71,9 @@ export const appRoutes: AppRoute[] = [
   { id: 'inventory', path: 'inventory', element: <InventoryPage /> },
   { id: 'admin', path: 'admin', element: <AdminPage /> },
   { id: 'deliveries', path: 'deliveries', element: <DeliveryPage /> },
+  { id: 'purchases', path: 'purchases', element: <PurchasesPage /> },
+  { id: 'reports', path: 'reports', element: <SalesPage /> },
+  { id: 'profile', path: 'profile', element: <ProfilePage /> },
   { id: 'not-found', path: '*', element: <NotFoundPage /> },
 ];
 
@@ -67,6 +81,15 @@ export const appRoutes: AppRoute[] = [
  * The primary sections are shared by the desktop sidebar and mobile tab bar.
  */
 export const NAV_ITEMS: NavItem[] = [
+  {
+    id: 'dashboard',
+    label: 'Dashboard',
+    description: 'Overview & shortcuts',
+    path: ROUTE_PATHS.dashboard,
+    icon: DashboardIcon,
+    primary: true,
+    matchChildren: true,
+  },
   {
     id: 'pos',
     label: 'POS',
@@ -121,21 +144,37 @@ export const NAV_ITEMS: NavItem[] = [
     matchChildren: true,
   },
   {
-    id: 'deliveries',
-    label: 'Delivery Management',
-    mobileLabel: 'Delivery',
-    description: 'Orders & riders',
-    path: ROUTE_PATHS.deliveries,
-    icon: DeliveryIcon,
+    id: 'purchases',
+    label: 'Purchases',
+    description: 'Stock received',
+    path: ROUTE_PATHS.purchases,
+    icon: PurchasesIcon,
     primary: true,
     matchChildren: true,
   },
   {
+    id: 'reports',
+    label: 'Reports',
+    description: 'Sales analysis',
+    path: ROUTE_PATHS.reports,
+    icon: ReportsIcon,
+    primary: true,
+    matchChildren: true,
+  },
+  {
+    id: 'deliveries',
+    label: 'Delivery',
+    description: 'Orders & riders',
+    path: ROUTE_PATHS.deliveries,
+    icon: DeliveryIcon,
+    matchChildren: true,
+  },
+  {
     id: 'admin',
-    label: 'Admin',
-    description: 'Configuration',
+    label: 'Settings',
+    description: 'Restaurant & terminal',
     path: ROUTE_PATHS.admin,
-    icon: AdminIcon,
+    icon: SettingsIcon,
     primary: true,
     matchChildren: true,
   },

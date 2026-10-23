@@ -128,6 +128,12 @@ const portableData = createDataPortService(
     databaseName: DB_NAME,
     databaseVersion: DB_VERSION,
     allStores: [...ALL_STORES],
+  optionalStores: [
+    STORES.notifications,
+    STORES.receiptAudits,
+    // Added after 5.1.9; a backup made before it must still restore.
+    STORES.purchases,
+  ],
     backupStores: [...backupStores],
     legacyBackupStores: [...legacyBackupStores],
     excludedStores: EXCLUDED_STORES,

@@ -9,8 +9,13 @@
  * time so "today" matches the operator's day rather than UTC.
  */
 
-import { salesRepository } from '@/data/repositories';
-import type { SaleRecord } from '@/types/domain';
+import {
+  menuItemsRepository,
+  orderItemsRepository,
+  ordersRepository,
+  salesRepository,
+} from '@/data/repositories';
+import type { OrderType, PaymentMethod, SaleRecord } from '@/types/domain';
 import type { Paisa } from '@/types/common';
 
 export type PeriodKey = 'today' | 'week' | 'month';
@@ -180,10 +185,331 @@ function summarise(
 
 const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+
+/* ------------------------------------------------------------------ */
+/* Reports                                                             */
+/* ------------------------------------------------------------------ */
+
+export type ReportPreset =
+  | 'today'
+  | 'yesterday'
+  | 'this-week'
+  | 'last-week'
+  | 'this-month'
+  | 'last-month'
+  | 'custom';
+
+export interface DateRange {
+  /** Inclusive local date, YYYY-MM-DD. */
+  from: string;
+  /** Inclusive local date, YYYY-MM-DD. */
+  to: string;
+}
+
+export interface ReportBucket {
+  label: string;
+  amount: Paisa;
+  orderCount: number;
+}
+
+export interface ProductPerformance {
+  name: string;
+  quantity: number;
+  amount: Paisa;
+}
+
+export interface SalesReport extends DateRange {
+  grossSales: Paisa;
+  netSales: Paisa;
+  discounts: Paisa;
+  taxTotal: Paisa;
+  refunds: Paisa;
+  refundCount: number;
+  orderCount: number;
+  itemCount: number;
+  averageOrder: Paisa;
+  byPayment: ReportBucket[];
+  byOrderType: ReportBucket[];
+  byDay: ReportBucket[];
+  byHour: ReportBucket[];
+  topProducts: ProductPerformance[];
+  topCategories: ProductPerformance[];
+  /** Countable sales in the range, newest first. */
+  sales: SaleRecord[];
+}
+
+function dayLabel(key: string): string {
+  const date = new Date(`${key}T00:00:00`);
+  if (!Number.isFinite(date.getTime())) return key;
+  return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+}
+
+/** Inclusive list of local date keys between two dates. */
+function eachDay(from: string, to: string): string[] {
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime())) {
+    return [];
+  }
+  const days: string[] = [];
+  const cursor = new Date(start);
+  // Safety bound: a decade of daily rows is far beyond any real report.
+  while (cursor <= end && days.length < 3660) {
+    days.push(dateKey(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return days;
+}
+
+const PAYMENT_LABELS: Record<PaymentMethod, string> = {
+  cash: 'Cash',
+  card: 'Card',
+  digital: 'Digital',
+  other: 'Other',
+};
+
+const ORDER_TYPE_LABELS: Record<OrderType, string> = {
+  'dine-in': 'Dine-in',
+  takeaway: 'Takeaway',
+  delivery: 'Delivery',
+};
+
+export const REPORT_PRESETS: { id: ReportPreset; label: string }[] = [
+  { id: 'today', label: 'Today' },
+  { id: 'yesterday', label: 'Yesterday' },
+  { id: 'this-week', label: 'This week' },
+  { id: 'last-week', label: 'Last week' },
+  { id: 'this-month', label: 'This month' },
+  { id: 'last-month', label: 'Last month' },
+  { id: 'custom', label: 'Custom range' },
+];
+
+/** Resolve a preset to concrete inclusive date bounds. */
+export function resolvePresetRange(
+  preset: ReportPreset,
+  now: Date = new Date(),
+): DateRange {
+  const today = dateKey(now);
+  switch (preset) {
+    case 'yesterday': {
+      const yesterday = addDays(now, -1);
+      const key = dateKey(yesterday);
+      return { from: key, to: key };
+    }
+    case 'this-week': {
+      return { from: dateKey(startOfWeek(now)), to: today };
+    }
+    case 'last-week': {
+      const start = addDays(startOfWeek(now), -7);
+      const end = addDays(start, 6);
+      return { from: dateKey(start), to: dateKey(end) };
+    }
+    case 'this-month': {
+      return { from: dateKey(startOfMonth(now)), to: today };
+    }
+    case 'last-month': {
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const end = new Date(now.getFullYear(), now.getMonth(), 0);
+      return { from: dateKey(start), to: dateKey(end) };
+    }
+    case 'custom':
+      return { from: today, to: today };
+    case 'today':
+    default:
+      return { from: today, to: today };
+  }
+}
+
+/**
+ * Build a complete report for an inclusive date range.
+ *
+ * Definitions match the accounting logic used at checkout:
+ *  - gross sales   = sum of order subtotals before discount and tax,
+ *  - discounts     = item-level plus order-level discounts,
+ *  - tax           = tax collected (inclusive or exclusive, as configured),
+ *  - net sales     = grand totals actually charged (what the till received),
+ *  - refunds/voids = cancelled or refunded sales, excluded from revenue.
+ * Net sales is revenue, never profit: product cost is not tracked as a
+ * guaranteed figure here, so no profit number is presented.
+ */
+async function buildReport(range: DateRange): Promise<SalesReport> {
+  const { from, to } = range;
+  const all = await salesRepository.list();
+  const inRange = all.filter(
+    (sale) => sale.businessDate >= from && sale.businessDate <= to,
+  );
+  const countable = inRange.filter(isCountable);
+  const voided = inRange.filter((sale) => !isCountable(sale));
+
+  const grossSales = countable.reduce((sum, s) => sum + safeNumber(s.subtotal), 0);
+  const netSales = countable.reduce((sum, s) => sum + safeNumber(s.grandTotal), 0);
+  const discounts = countable.reduce(
+    (sum, s) => sum + safeNumber(s.discountTotal),
+    0,
+  );
+  const taxTotal = countable.reduce((sum, s) => sum + safeNumber(s.taxTotal), 0);
+  const itemCount = countable.reduce((sum, s) => sum + safeNumber(s.itemCount), 0);
+  const refunds = voided.reduce((sum, s) => sum + safeNumber(s.grandTotal), 0);
+
+  /* Order type: prefer the value stored on the sale; fall back to the order
+     record for sales written before v5.1.9 added the field. */
+  const needsOrder = countable.some((sale) => !sale.orderType);
+  const orderTypes = new Map<string, OrderType>();
+  if (needsOrder) {
+    const orders = await ordersRepository.list();
+    for (const order of orders) orderTypes.set(order.id, order.orderType);
+  }
+
+  const paymentTotals = new Map<PaymentMethod, ReportBucket>();
+  for (const method of ['cash', 'card', 'digital', 'other'] as PaymentMethod[]) {
+    paymentTotals.set(method, {
+      label: PAYMENT_LABELS[method],
+      amount: 0,
+      orderCount: 0,
+    });
+  }
+
+  const typeTotals = new Map<OrderType, ReportBucket>();
+  for (const type of ['dine-in', 'takeaway', 'delivery'] as OrderType[]) {
+    typeTotals.set(type, {
+      label: ORDER_TYPE_LABELS[type],
+      amount: 0,
+      orderCount: 0,
+    });
+  }
+
+  const dayTotals = new Map<string, ReportBucket>();
+  for (const day of eachDay(from, to)) {
+    dayTotals.set(day, { label: dayLabel(day), amount: 0, orderCount: 0 });
+  }
+
+  const hourTotals = new Map<number, ReportBucket>();
+  for (let hour = 0; hour < 24; hour += 1) {
+    hourTotals.set(hour, {
+      label: `${String(hour).padStart(2, '0')}:00`,
+      amount: 0,
+      orderCount: 0,
+    });
+  }
+
+  for (const sale of countable) {
+    const amount = safeNumber(sale.grandTotal);
+
+    const method = paymentTotals.get(sale.paymentMethod) ?? paymentTotals.get('other');
+    if (method) {
+      method.amount += amount;
+      method.orderCount += 1;
+    }
+
+    const type = sale.orderType ?? orderTypes.get(sale.orderId) ?? 'takeaway';
+    const typeBucket = typeTotals.get(type);
+    if (typeBucket) {
+      typeBucket.amount += amount;
+      typeBucket.orderCount += 1;
+    }
+
+    const dayBucket = dayTotals.get(sale.businessDate);
+    if (dayBucket) {
+      dayBucket.amount += amount;
+      dayBucket.orderCount += 1;
+    }
+
+    const completed = new Date(sale.completedAt);
+    if (Number.isFinite(completed.getTime())) {
+      const hourBucket = hourTotals.get(completed.getHours());
+      if (hourBucket) {
+        hourBucket.amount += amount;
+        hourBucket.orderCount += 1;
+      }
+    }
+  }
+
+  /* Product and category performance, from the actual order lines of the
+     countable sales in range. One read of the order-item store, grouped in
+     memory: for a single restaurant this is the cheapest correct join. */
+  const inRangeOrderIds = new Set(countable.map((sale) => sale.orderId));
+  const [allItems, menuItems] = await Promise.all([
+    orderItemsRepository.list(),
+    menuItemsRepository.list(),
+  ]);
+
+  const categoryByItem = new Map<string, string>();
+  for (const item of menuItems) {
+    categoryByItem.set(item.id, item.category?.trim() || 'Uncategorised');
+  }
+
+  const productTotals = new Map<string, ProductPerformance>();
+  const categoryTotals = new Map<string, ProductPerformance>();
+
+  for (const line of allItems) {
+    if (!inRangeOrderIds.has(line.orderId)) continue;
+    const quantity = safeNumber(line.quantity);
+    if (quantity <= 0) continue;
+    const amount =
+      safeNumber(line.lineTotal) + safeNumber(line.discount);
+
+    const productKey = line.name.trim() || 'Unnamed item';
+    const product = productTotals.get(productKey) ?? {
+      name: productKey,
+      quantity: 0,
+      amount: 0,
+    };
+    product.quantity += quantity;
+    product.amount += amount;
+    productTotals.set(productKey, product);
+
+    const category =
+      (line.menuItemId ? categoryByItem.get(line.menuItemId) : undefined) ??
+      'Uncategorised';
+    const categoryEntry = categoryTotals.get(category) ?? {
+      name: category,
+      quantity: 0,
+      amount: 0,
+    };
+    categoryEntry.quantity += quantity;
+    categoryEntry.amount += amount;
+    categoryTotals.set(category, categoryEntry);
+  }
+
+  const topProducts = [...productTotals.values()]
+    .sort((a, b) => b.quantity - a.quantity || b.amount - a.amount)
+    .slice(0, 10);
+  const topCategories = [...categoryTotals.values()]
+    .sort((a, b) => b.amount - a.amount || b.quantity - a.quantity)
+    .slice(0, 8);
+
+  return {
+    from,
+    to,
+    grossSales,
+    netSales,
+    discounts,
+    taxTotal,
+    refunds,
+    refundCount: voided.length,
+    orderCount: countable.length,
+    itemCount,
+    averageOrder: countable.length > 0 ? Math.round(netSales / countable.length) : 0,
+    byPayment: [...paymentTotals.values()],
+    byOrderType: [...typeTotals.values()],
+    byDay: [...dayTotals.values()],
+    byHour: [...hourTotals.values()],
+    topProducts,
+    topCategories,
+    sales: [...countable].sort((a, b) =>
+      b.completedAt.localeCompare(a.completedAt),
+    ),
+  };
+}
+
 export const salesService = {
   dateKey,
   startOfWeek,
   startOfMonth,
+
+  report: buildReport,
+  resolvePresetRange,
+  REPORT_PRESETS,
 
   /** Every countable sale record. */
   async allSales(): Promise<SaleRecord[]> {

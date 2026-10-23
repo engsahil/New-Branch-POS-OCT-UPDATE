@@ -72,7 +72,7 @@
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  padding: var(--sp-3);
+  padding: 9px var(--sp-3);
   border-radius: var(--radius-md);
   color: var(--color-text-secondary);
   position: relative;
@@ -88,24 +88,17 @@
 
 .linkActive,
 .linkActive:hover {
-  /* A quiet bronze tint — the navigation highlight. */
-  background-color: color-mix(in srgb, var(--color-accent) 20%, var(--color-surface));
-  color: var(--color-text);
+  /* Solid emerald pill with white text: the reference's active state. */
+  background-color: var(--color-primary);
+  color: var(--color-primary-contrast);
 }
 
-/* Active marker — a quiet bronze bar rather than a heavy fill */
+/*
+ * No separate marker bar: the pill itself carries the active state, so the
+ * sidebar reads the same at a glance on a low-contrast till screen.
+ */
 .linkActive::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  translate: 0 -50%;
-  width: 3px;
-  height: 18px;
-  border-radius: 0 var(--radius-full) var(--radius-full) 0;
-  background-color: var(--color-accent);
-  transform-origin: center;
-  animation: marker var(--dur-normal) var(--ease-out) both;
+  content: none;
 }
 
 /*
@@ -132,9 +125,13 @@
   transition: color var(--dur-fast) var(--ease-out);
 }
 
-.link:hover .linkIcon,
-.linkActive .linkIcon {
+.link:hover .linkIcon {
   color: var(--color-text);
+}
+
+.linkActive .linkIcon,
+.linkActive:hover .linkIcon {
+  color: var(--color-primary-contrast);
 }
 
 .linkText {
@@ -145,7 +142,7 @@
 }
 
 .linkLabel {
-  font-size: var(--fs-md);
+  font-size: var(--fs-sm);
   font-weight: var(--fw-medium);
   letter-spacing: var(--tracking-tight);
   overflow: hidden;
@@ -154,6 +151,7 @@
 }
 
 .linkDescription {
+  display: none; /* labels only: the reference's compact rail */
   font-size: var(--fs-2xs);
   color: var(--color-text-faint);
   overflow: hidden;

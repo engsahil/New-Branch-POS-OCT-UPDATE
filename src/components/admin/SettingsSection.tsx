@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
+import { useAuth } from '@/app/AuthContext';
 import { Button, Input } from '@/components/ui';
 import { APP_CONFIG, CURRENCY } from '@/config/app.config';
 import { VENDOR } from '@/content/legal';
+import {
+  NOTIFICATION_KINDS,
+  notificationService,
+  type NotificationPreferences,
+} from '@/services/notificationService';
+import { onboardingService } from '@/services/onboardingService';
 import { SETTING_KEYS, settingsService } from '@/services/settingsService';
 import { DataSection } from './DataSection';
 import styles from './PanelSection.module.css';
@@ -17,7 +24,21 @@ export interface SettingsSectionProps {
   onOpenAbout?: () => void;
 }
 
+const NOTIFICATION_LABELS: Record<string, string> = {
+  order: 'Completed orders',
+  stock: 'Low and out-of-stock alerts',
+  payment: 'Payment problems',
+  audit: 'Receipt corrections and cancellations',
+  system: 'Application notices',
+};
+
 export function SettingsSection({ onOpenAbout }: SettingsSectionProps = {}) {
+  const { user } = useAuth();
+  const [notifications, setNotifications] = useState<NotificationPreferences | null>(
+    null,
+  );
+  const [notificationSaved, setNotificationSaved] = useState(false);
+  const [tourStarted, setTourStarted] = useState(false);
   const [prefix, setPrefix] = useState('');
   const [autoShow, setAutoShow] = useState(true);
   const [lowStock, setLowStock] = useState('');
@@ -33,7 +54,9 @@ export function SettingsSection({ onOpenAbout }: SettingsSectionProps = {}) {
         settingsService.get<boolean>(SETTING_KEYS.autoShowReceipt, true),
         settingsService.get<number | null>(SETTING_KEYS.lowStockDefault, null),
       ]);
+      const preferences = await notificationService.preferences();
       if (!active) return;
+      setNotifications(preferences);
       setPrefix(p);
       setAutoShow(a);
       setLowStock(l === null ? '' : String(l));
@@ -60,6 +83,26 @@ export function SettingsSection({ onOpenAbout }: SettingsSectionProps = {}) {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function saveNotifications(): Promise<void> {
+    if (!notifications) return;
+    await notificationService.savePreferences(notifications);
+    setNotificationSaved(true);
+    window.setTimeout(() => setNotificationSaved(false), 2500);
+  }
+
+  function toggleKind(kind: string): void {
+    setNotifications((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        kinds: {
+          ...current.kinds,
+          [kind]: !current.kinds[kind as keyof typeof current.kinds],
+        },
+      };
+    });
   }
 
   if (!loaded) {
@@ -122,6 +165,82 @@ export function SettingsSection({ onOpenAbout }: SettingsSectionProps = {}) {
         <div className={styles.actions}>
           <Button onClick={() => void save()} disabled={saving}>
             {saving ? 'Saving' : 'Save settings'}
+          </Button>
+        </div>
+      </section>
+
+      <section className={styles.card}>
+        <div className={styles.cardHead}>
+          <h3 className={styles.cardTitle}>Notifications</h3>
+          <span className={styles.status} aria-live="polite">
+            {notificationSaved ? 'Saved' : ''}
+          </span>
+        </div>
+        <p className={styles.hint}>
+          Choose which events appear in the notification centre.
+        </p>
+
+        <label className={styles.toggleRow}>
+          <input
+            type="checkbox"
+            name="notificationsEnabled"
+            className={styles.checkbox}
+            checked={notifications?.enabled ?? true}
+            onChange={(event) =>
+              setNotifications((current) =>
+                current ? { ...current, enabled: event.target.checked } : current,
+              )
+            }
+          />
+          <span>
+            <span className={styles.toggleLabel}>Show notifications</span>
+            <span className={styles.toggleHint}>
+              Turning this off stops new entries; existing ones stay visible.
+            </span>
+          </span>
+        </label>
+
+        {NOTIFICATION_KINDS.map((kind) => (
+          <label key={kind} className={styles.toggleRow}>
+            <input
+              type="checkbox"
+              name={`notifications-${kind}`}
+              className={styles.checkbox}
+              checked={notifications?.kinds[kind] ?? true}
+              disabled={!notifications?.enabled}
+              onChange={() => toggleKind(kind)}
+            />
+            <span>
+              <span className={styles.toggleLabel}>
+                {NOTIFICATION_LABELS[kind] ?? kind}
+              </span>
+            </span>
+          </label>
+        ))}
+
+        <div className={styles.actions}>
+          <Button onClick={() => void saveNotifications()}>
+            Save notifications
+          </Button>
+        </div>
+      </section>
+
+      <section className={styles.card}>
+        <h3 className={styles.cardTitle}>Guided tour</h3>
+        <p className={styles.hint}>
+          Replay the short interface tour. It is never shown again automatically
+          once you have finished or skipped it.
+        </p>
+        <div className={styles.actions}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              void onboardingService.restartTour(user?.username ?? 'admin');
+              setTourStarted(true);
+              window.setTimeout(() => setTourStarted(false), 2500);
+            }}
+          >
+            {tourStarted ? 'Tour started' : 'Restart guided tour'}
           </Button>
         </div>
       </section>

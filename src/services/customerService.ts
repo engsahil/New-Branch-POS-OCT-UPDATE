@@ -162,6 +162,49 @@ export const customerService = {
     return { orderCount, totalSpent, lastOrderAt, cancelledCount };
   },
 
+  /**
+   * Stats for every customer from a single pass over the orders store.
+   *
+   * The customer list needs order counts and spend for each row; calling
+   * `stats()` per customer would scan the orders store once per row. This
+   * reads it once and aggregates, which keeps the list fast on a long ledger.
+   */
+  async statsForAll(): Promise<Map<ID, CustomerStats>> {
+    const orders = await ordersRepository.list();
+    const map = new Map<ID, CustomerStats>();
+
+    for (const order of orders) {
+      if (!order.customerId) continue;
+      const current =
+        map.get(order.customerId) ??
+        ({
+          orderCount: 0,
+          totalSpent: 0,
+          lastOrderAt: null,
+          cancelledCount: 0,
+        } satisfies CustomerStats);
+
+      if (order.status === 'cancelled') {
+        current.cancelledCount += 1;
+        map.set(order.customerId, current);
+        continue;
+      }
+      if (order.status !== 'completed') continue;
+
+      current.orderCount += 1;
+      if (typeof order.grandTotal === 'number' && Number.isFinite(order.grandTotal)) {
+        current.totalSpent += Math.max(0, order.grandTotal);
+      }
+      const at = order.completedAt ?? order.createdAt;
+      if (at && (!current.lastOrderAt || at > current.lastOrderAt)) {
+        current.lastOrderAt = at;
+      }
+      map.set(order.customerId, current);
+    }
+
+    return map;
+  },
+
   /** Orders for one customer, newest first — the customer's history. */
   async ordersFor(customerId: ID): Promise<OrderRecord[]> {
     const orders = await ordersRepository.findByIndex(

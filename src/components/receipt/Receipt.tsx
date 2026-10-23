@@ -27,7 +27,9 @@ export function Receipt({ model, width }: ReceiptProps) {
     >
       {/* ---------- Header ---------- */}
       <header className={styles.header}>
-        {logoUrl?.startsWith('data:image/') && failedLogoUrl !== logoUrl ? (
+        {model.header.showLogo !== false &&
+        logoUrl?.startsWith('data:image/') &&
+        failedLogoUrl !== logoUrl ? (
           <img
             src={logoUrl}
             alt=""

@@ -18,6 +18,8 @@ export interface ImageFieldProps {
   label?: string;
   /** Longest edge the stored image is downscaled to. */
   maxEdge?: number;
+  /** Optional width / height ratio the image is centre-cropped to. */
+  aspect?: number;
   /** Label for the upload button when no image is set. */
   uploadLabel?: string;
   /** Overrides the default hint shown when the field is empty. */
@@ -38,6 +40,7 @@ export function ImageField({
   disabled,
   label = 'Image',
   maxEdge = LOGO_MAX_EDGE,
+  aspect,
   uploadLabel = 'Upload image',
   emptyHint,
   idPrefix = 'image',
@@ -55,7 +58,7 @@ export function ImageField({
     setError(null);
     setBusy(true);
     try {
-      const optimised = await optimiseImage(file, maxEdge);
+      const optimised = await optimiseImage(file, maxEdge, aspect);
       onChange({
         dataUrl: optimised.dataUrl,
         type: optimised.type,
@@ -84,7 +87,12 @@ export function ImageField({
       <div className={styles.row}>
         <div className={styles.preview} aria-live="polite">
           {value ? (
-            <img src={value.dataUrl} alt={altText} className={styles.image} />
+            <img
+              src={value.dataUrl}
+              alt={altText}
+              className={styles.image}
+              style={aspect ? { aspectRatio: String(aspect) } : undefined}
+            />
           ) : (
             <span className={styles.placeholder} aria-hidden="true">
               <ImageIcon width={22} height={22} />
