@@ -17,8 +17,9 @@ export const DB_NAME = 'pos-db';
  * v2 — full domain schema for offline-first operation
  * v6 — customers store, by_customerId index on orders
  * v7 — notifications and receipt edit audit stores (v5.1.9)
+ * v8 — purchases (stock receiving) log
  */
-export const DB_VERSION = 7;
+export const DB_VERSION = 8;
 
 export const STORES = {
   admin: 'admin',
@@ -36,6 +37,7 @@ export const STORES = {
   settings: 'settings',
   notifications: 'notifications',
   receiptAudits: 'receiptAudits',
+  purchases: 'purchases',
   syncQueue: 'syncQueue',
 } as const;
 
@@ -206,6 +208,17 @@ export const STORE_SCHEMAS: StoreSchema[] = [
     indexes: [
       { name: 'by_orderId', keyPath: 'orderId' },
       { name: 'by_createdAt', keyPath: 'createdAt' },
+    ],
+  },
+  {
+    name: STORES.purchases,
+    keyPath: 'id',
+    description:
+      'Recorded stock receipts: what was received, from whom, at what cost.',
+    indexes: [
+      { name: 'by_receivedAt', keyPath: 'receivedAt' },
+      { name: 'by_inventoryId', keyPath: 'inventoryId' },
+      { name: 'by_updatedAt', keyPath: 'updatedAt' },
     ],
   },
   {

@@ -6,6 +6,7 @@ import {
   restaurantService,
   type RestaurantProfileInput,
 } from '@/services/restaurantService';
+import { BannerField } from './BannerField';
 import { LogoField } from './LogoField';
 import styles from './RestaurantProfileForm.module.css';
 
@@ -46,7 +47,9 @@ function isEqual(a: RestaurantProfileInput, b: RestaurantProfileInput): boolean 
     a.email === b.email &&
     a.receiptInfo === b.receiptInfo &&
     a.receiptFooter === b.receiptFooter &&
-    (a.logo?.dataUrl ?? null) === (b.logo?.dataUrl ?? null)
+    a.tagline === b.tagline &&
+    (a.logo?.dataUrl ?? null) === (b.logo?.dataUrl ?? null) &&
+    (a.banner?.dataUrl ?? null) === (b.banner?.dataUrl ?? null)
   );
 }
 
@@ -168,6 +171,26 @@ export function RestaurantProfileForm({ onSaved }: RestaurantProfileFormProps) {
             value={values.logo}
             onChange={(logo) => setField('logo', logo)}
             disabled={saving}
+          />
+        </div>
+
+        <div className={styles.divider} />
+
+        <div className={styles.group}>
+          <BannerField
+            value={values.banner}
+            onChange={(banner) => setField('banner', banner)}
+            disabled={saving}
+          />
+
+          <Input
+            label="Banner tagline (optional)"
+            name="tagline"
+            value={values.tagline}
+            onChange={(e) => setField('tagline', e.target.value)}
+            maxLength={90}
+            hint="One short line shown under the welcome message. Leave empty for none."
+            fullWidth
           />
         </div>
 

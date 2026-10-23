@@ -385,3 +385,45 @@
   color: var(--color-text-secondary);
   line-height: var(--lh-snug);
 }
+
+/* ---------- Appearance: palette ---------- */
+
+.palette {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--sp-3);
+}
+
+.swatchRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.swatch {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.swatchText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.swatchLabel {
+  font-size: var(--fs-xs);
+  color: var(--color-text);
+}
+
+.swatchValue {
+  font-size: var(--fs-2xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}

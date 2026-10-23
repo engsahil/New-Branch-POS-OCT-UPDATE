@@ -65,6 +65,10 @@ const {
   DEFAULT_DISPLAY_PREFERENCES,
   displayPreferencesService,
 } = require(path.join(root, 'src/services/displayPreferencesService.ts'));
+const { purchaseService, PurchaseError } = require(
+  path.join(root, 'src/services/purchaseService.ts'),
+);
+const { inventoryService } = require(path.join(root, 'src/services/inventoryService.ts'));
 const { onboardingService } = require(path.join(
   root,
   'src/services/onboardingService.ts',
@@ -558,6 +562,56 @@ assert.deepEqual(
   'reset restores every display default',
 );
 
+/* ---------------- Purchases (stock receiving) ---------------- */
+
+const stockLine = await inventoryService.create({
+  name: 'Test patties',
+  sku: 'PATTY-1',
+  unit: 'unit',
+  quantity: 4,
+  reorderLevel: 2,
+  menuItemId: null,
+  isAvailable: true,
+});
+
+const receipt = await purchaseService.record({
+  inventoryId: stockLine.id,
+  quantity: 10,
+  unitCost: 12500,
+  supplier: 'Test supplier',
+  reference: 'INV-1',
+  note: 'Delivered',
+});
+assert.equal(receipt.quantityAfter, 14, 'a receipt adds to the quantity on hand');
+assert.equal(
+  (await inventoryService.getById(stockLine.id)).record.quantity,
+  14,
+  'the stock line was actually updated',
+);
+assert.equal(
+  (await purchaseService.list()).length >= 1,
+  true,
+  'the receipt is kept in history',
+);
+
+await assert.rejects(
+  purchaseService.record({
+    inventoryId: stockLine.id,
+    quantity: -50,
+    unitCost: null,
+    supplier: '',
+    reference: '',
+    note: '',
+  }),
+  (error) => error instanceof PurchaseError,
+  'an adjustment larger than the stock on hand is refused',
+);
+assert.equal(
+  (await inventoryService.getById(stockLine.id)).record.quantity,
+  14,
+  'a refused adjustment leaves the quantity untouched',
+);
+
 console.log(
-  'v5.1.9 checks passed: saved-customer reuse without duplicates, persistent deduped notifications with accurate unread counts, date-bounded sales reports excluding cancelled sales, audited receipt corrections with exact stock movement and refusal cases, and setup detection that preserves existing installations, plus display preferences that persist but never alter the underlying data.',
+  'v5.1.9 checks passed: saved-customer reuse without duplicates, persistent deduped notifications with accurate unread counts, date-bounded sales reports excluding cancelled sales, audited receipt corrections with exact stock movement and refusal cases, and setup detection that preserves existing installations, plus display preferences that persist but never alter the underlying data, and stock receipts that update inventory atomically and reject impossible adjustments.',
 );

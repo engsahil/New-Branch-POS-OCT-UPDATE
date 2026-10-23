@@ -33,6 +33,7 @@ const allStores = [
   'settings',
   'notifications',
   'receiptAudits',
+  'purchases',
   'syncQueue',
 ];
 const backupStores = allStores.filter((name) => !['admin', 'syncQueue'].includes(name));
@@ -53,7 +54,7 @@ const config = {
   allStores,
   backupStores,
   legacyBackupStores,
-  optionalStores: ['notifications', 'receiptAudits'],
+  optionalStores: ['notifications', 'receiptAudits', 'purchases'],
   excludedStores,
   orderSequenceSettingId: 'order.sequence',
   uniqueIndexes: { orders: 'orderNumber', sales: 'orderId' },

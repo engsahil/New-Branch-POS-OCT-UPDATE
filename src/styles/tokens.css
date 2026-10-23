@@ -97,6 +97,22 @@
   --color-info: var(--c-blue-500);
   --color-info-soft: var(--c-blue-100);
 
+  /* --- Accent support colours (charts, status, highlights) --- */
+  --color-accent-orange: #f59e0b;
+  --color-accent-blue: #2583d8;
+  --color-accent-gold: #d9a441;
+  --color-accent-orange-soft: #fdf3e3;
+  --color-accent-blue-soft: #e8f2fc;
+  --color-accent-gold-soft: #faf3e3;
+
+  /* Chart series: ordered, colour-blind-safe against the light surfaces. */
+  --chart-1: #176b4d;
+  --chart-2: #2583d8;
+  --chart-3: #f59e0b;
+  --chart-4: #25845f;
+  --chart-5: #d9a441;
+  --chart-grid: #e8f0ec;
+
   --color-focus-ring: var(--c-green-500);
   --color-overlay: rgb(13 32 26 / 38%);
 
@@ -172,7 +188,7 @@
   --dur-slow: 320ms;
 
   /* --- Layout --- */
-  --layout-sidebar-w: 244px;
+  --layout-sidebar-w: 224px;
   --layout-rail-w: 80px;
   --layout-tabbar-h: 62px;
   --layout-content-max: 1360px;

@@ -22,7 +22,7 @@ run, not predicted.
 | Types | `npx tsc -b --noEmit` | exit 0, no diagnostics |
 | Service/unit tests | `npm test` | 4 suites pass |
 | Production build | `npm run build` | success, 52 precached files |
-| UI smoke (dev-only) | `node scripts/smoke-ui.mjs` | 14 assertions pass, exit 0 |
+| UI smoke (dev-only) | `node scripts/smoke-ui.mjs` | 19 assertions pass, exit 0 |
 | Test credential in build | `grep -r "smoke-test-password" dist` | no match |
 | Emoji scan | `src/`, `public/`, `README.md`, `scripts/` | none found |
 | Secret scan | `.env` absent from the tree | no env file committed |
@@ -87,6 +87,31 @@ npm run build                                          # rebuild without the tes
 ```
 
 ---
+
+## 1a. Interface conversion (latest pass)
+
+- Unified dashboard at `/dashboard`: hero banner (upload/replace/crop/preview/
+  remove), four KPI cards with real day-over-day deltas, sales trend line,
+  order-type and payment doughnuts, top selling items, recent orders that open
+  the real receipt dialog, and quick actions to every module.
+- The duplicate Dashboard section was removed from the Settings area; Settings
+  now opens on Restaurant and gained an Appearance section (live palette,
+  banner shortcut, dashboard/order-list switches, reset to default).
+- Header administrator menu (My profile, Settings, Sign out) and a `/profile`
+  page that saves display name, email and phone without touching credentials.
+- Navigation matches the reference: Dashboard, POS, Sales, Customers, Menu,
+  Deals, Inventory, Purchases, Reports, Delivery, Settings.
+- New `/purchases` module records stock receipts against real inventory lines
+  (new additive `purchases` store, database v8).
+- Customers is now a searchable, paginated table with order counts and spend
+  from a single pass over the orders store.
+- Menu items gained optional SKU, barcode, cost price, prep time and
+  ingredients.
+- First-run setup can be deferred: "Skip for now" on the password step and
+  "Setup later" on the first step, both without weakening authentication; the
+  dashboard shows a dismissible reminder until the terminal is configured.
+- Charts are hand-drawn SVG with no new dependency; the runtime dependency list
+  is unchanged.
 
 ## 2. What changed
 

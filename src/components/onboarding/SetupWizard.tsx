@@ -41,6 +41,8 @@ export function SetupWizard({ onFinish }: SetupWizardProps) {
     return {
       name: name.trim(),
       logo: null,
+      banner: null,
+      tagline: '',
       address: address.trim(),
       phone: phone.trim(),
       email: '',
@@ -56,11 +58,26 @@ export function SetupWizard({ onFinish }: SetupWizardProps) {
     setBusy(true);
     setError(null);
     try {
-      await restaurantService.save(profileInput());
+      // Only write a profile when there is a name to write; otherwise the
+      // dashboard reminds the operator and Settings stays the way in.
+      if (name.trim()) await restaurantService.save(profileInput());
       await onboardingService.completeSetup();
       onFinish();
     } catch {
       setError('Setup could not be saved. Check the details and try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** Close the wizard without storing anything; Settings stays available. */
+  async function later(): Promise<void> {
+    setBusy(true);
+    try {
+      await onboardingService.completeSetup();
+      onFinish();
+    } catch {
+      setError('Setup could not be closed. Please try again.');
     } finally {
       setBusy(false);
     }
@@ -133,7 +150,7 @@ export function SetupWizard({ onFinish }: SetupWizardProps) {
                 : step === 3
                   ? 'Tax and receipt'
                   : step === 4
-                    ? 'Administrator password'
+                    ? 'Administrator access'
                     : 'Ready'}
           </h1>
         </header>
@@ -218,6 +235,12 @@ export function SetupWizard({ onFinish }: SetupWizardProps) {
 
         {step === 4 ? (
           <div className={styles.body}>
+            <p className={styles.text}>
+              You are already signed in, so a new password is optional. Set one
+              now, or keep the current credentials and change them later under
+              Settings, Security. Skipping does not weaken authentication: the
+              terminal still requires a password at every sign-in.
+            </p>
             <Input
               label="Current password"
               name="setupCurrent"
@@ -278,7 +301,16 @@ export function SetupWizard({ onFinish }: SetupWizardProps) {
         <footer className={styles.footer}>
           <span className={styles.footerSpacer} />
           {step === 1 ? (
-            <Button onClick={() => setStep(2)}>Continue</Button>
+            <>
+              <Button
+                variant="ghost"
+                onClick={() => void later()}
+                disabled={busy}
+              >
+                Setup later
+              </Button>
+              <Button onClick={() => setStep(2)}>Continue</Button>
+            </>
           ) : step === 2 ? (
             <>
               <Button variant="ghost" onClick={() => setStep(1)}>
@@ -297,8 +329,15 @@ export function SetupWizard({ onFinish }: SetupWizardProps) {
             </>
           ) : step === 4 ? (
             <>
-              <Button variant="ghost" onClick={() => setStep(3)}>
+              <Button variant="ghost" onClick={() => setStep(3)} disabled={busy}>
                 Back
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => setStep(5)}
+                disabled={busy}
+              >
+                Skip for now
               </Button>
               <Button onClick={() => void savePassword()} disabled={busy}>
                 {busy ? 'Saving' : 'Set password and finish'}

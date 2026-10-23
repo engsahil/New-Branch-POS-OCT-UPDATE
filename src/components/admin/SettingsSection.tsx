@@ -8,13 +8,6 @@ import {
   notificationService,
   type NotificationPreferences,
 } from '@/services/notificationService';
-import {
-  DASHBOARD_SECTION_LABELS,
-  DEFAULT_DISPLAY_PREFERENCES,
-  ORDER_LIST_LABELS,
-  displayPreferencesService,
-  type DisplayPreferences,
-} from '@/services/displayPreferencesService';
 import { onboardingService } from '@/services/onboardingService';
 import { SETTING_KEYS, settingsService } from '@/services/settingsService';
 import { DataSection } from './DataSection';
@@ -45,11 +38,6 @@ export function SettingsSection({ onOpenAbout }: SettingsSectionProps = {}) {
     null,
   );
   const [notificationSaved, setNotificationSaved] = useState(false);
-  const [display, setDisplay] = useState<DisplayPreferences>(
-    DEFAULT_DISPLAY_PREFERENCES,
-  );
-  const [displaySaved, setDisplaySaved] = useState(false);
-  const [displaySaving, setDisplaySaving] = useState(false);
   const [tourStarted, setTourStarted] = useState(false);
   const [prefix, setPrefix] = useState('');
   const [autoShow, setAutoShow] = useState(true);
@@ -67,10 +55,8 @@ export function SettingsSection({ onOpenAbout }: SettingsSectionProps = {}) {
         settingsService.get<number | null>(SETTING_KEYS.lowStockDefault, null),
       ]);
       const preferences = await notificationService.preferences();
-      const storedDisplay = await displayPreferencesService.get();
       if (!active) return;
       setNotifications(preferences);
-      setDisplay(storedDisplay);
       setPrefix(p);
       setAutoShow(a);
       setLowStock(l === null ? '' : String(l));
@@ -104,28 +90,6 @@ export function SettingsSection({ onOpenAbout }: SettingsSectionProps = {}) {
     await notificationService.savePreferences(notifications);
     setNotificationSaved(true);
     window.setTimeout(() => setNotificationSaved(false), 2500);
-  }
-
-  async function saveDisplay(next: DisplayPreferences): Promise<void> {
-    setDisplaySaving(true);
-    try {
-      setDisplay(await displayPreferencesService.save(next));
-      setDisplaySaved(true);
-      window.setTimeout(() => setDisplaySaved(false), 2500);
-    } finally {
-      setDisplaySaving(false);
-    }
-  }
-
-  async function resetDisplay(): Promise<void> {
-    setDisplaySaving(true);
-    try {
-      setDisplay(await displayPreferencesService.reset());
-      setDisplaySaved(true);
-      window.setTimeout(() => setDisplaySaved(false), 2500);
-    } finally {
-      setDisplaySaving(false);
-    }
   }
 
   function toggleKind(kind: string): void {
@@ -201,95 +165,6 @@ export function SettingsSection({ onOpenAbout }: SettingsSectionProps = {}) {
         <div className={styles.actions}>
           <Button onClick={() => void save()} disabled={saving}>
             {saving ? 'Saving' : 'Save settings'}
-          </Button>
-        </div>
-      </section>
-
-      <section className={styles.card}>
-        <div className={styles.cardHead}>
-          <h3 className={styles.cardTitle}>Dashboard and order list</h3>
-          <span className={styles.status} aria-live="polite">
-            {displaySaved ? 'Saved' : ''}
-          </span>
-        </div>
-        <p className={styles.hint}>
-          Choose which Dashboard blocks and which order-row details are shown.
-          Hiding a block never changes a figure: the same data is still recorded
-          and still exported from Sales.
-        </p>
-
-        {(Object.keys(DASHBOARD_SECTION_LABELS) as Array<
-          keyof DisplayPreferences['dashboard']
-        >).map((key) => (
-          <label key={key} className={styles.toggleRow}>
-            <input
-              type="checkbox"
-              name={`dashboard-${key}`}
-              className={styles.checkbox}
-              checked={display.dashboard[key]}
-              onChange={() =>
-                setDisplay((current) => ({
-                  ...current,
-                  dashboard: {
-                    ...current.dashboard,
-                    [key]: !current.dashboard[key],
-                  },
-                }))
-              }
-            />
-            <span>
-              <span className={styles.toggleLabel}>
-                {DASHBOARD_SECTION_LABELS[key]}
-              </span>
-            </span>
-          </label>
-        ))}
-
-        {(Object.keys(ORDER_LIST_LABELS) as Array<
-          keyof DisplayPreferences['orderList']
-        >).map((key) => (
-          <label key={key} className={styles.toggleRow}>
-            <input
-              type="checkbox"
-              name={`order-list-${key}`}
-              className={styles.checkbox}
-              checked={display.orderList[key]}
-              onChange={() =>
-                setDisplay((current) => ({
-                  ...current,
-                  orderList: {
-                    ...current.orderList,
-                    [key]: !current.orderList[key],
-                  },
-                }))
-              }
-            />
-            <span>
-              <span className={styles.toggleLabel}>
-                Order rows: {ORDER_LIST_LABELS[key]}
-              </span>
-            </span>
-          </label>
-        ))}
-
-        <p className={styles.hint}>
-          The colour theme, currency and language are fixed at build time so
-          receipts and reports stay consistent.
-        </p>
-
-        <div className={styles.actions}>
-          <Button
-            onClick={() => void saveDisplay(display)}
-            disabled={displaySaving}
-          >
-            {displaySaving ? 'Saving' : 'Save display settings'}
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={() => void resetDisplay()}
-            disabled={displaySaving}
-          >
-            Reset to default
           </Button>
         </div>
       </section>

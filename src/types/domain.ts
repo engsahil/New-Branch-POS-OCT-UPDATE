@@ -30,6 +30,13 @@ export interface AdminRecord extends BaseEntity {
    * database does not yield a usable token.
    */
   sessionTokenHash?: string | null;
+  /**
+   * Optional contact details for the administrator. Purely informational —
+   * they are never used to authenticate and carry no credential material.
+   */
+  displayName?: string;
+  email?: string;
+  phone?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -78,6 +85,15 @@ export interface RestaurantRecord extends BaseEntity {
   /** Thank-you line printed at the very bottom of a receipt. */
   receiptFooter: string;
 
+  /**
+   * Dashboard hero image. Optional: records written before this field existed
+   * simply render the default banner treatment. Stored in the same optimised
+   * form as the logo, so it is a few tens of kilobytes, not megabytes.
+   */
+  banner?: StoredImage | null;
+  /** Optional one-line tagline shown over the banner. Empty means none. */
+  tagline?: string;
+
   /** Sales tax percentage applied at billing, e.g. 16 for 16%. */
   taxPercent: number;
   /** Whether displayed prices already include tax. */
@@ -124,6 +140,19 @@ export interface MenuItemRecord extends BaseEntity {
    */
   discountPercent?: number | null;
   sortOrder?: number;
+  /**
+   * Optional commercial details. All are free-form or numeric extras an
+   * operator may keep for their own records; none of them changes checkout
+   * pricing, which always comes from the item's price rows and discount.
+   */
+  sku?: string;
+  barcode?: string;
+  /** Cost per portion in paisa, used to show margin in the item form. */
+  costPrice?: Paisa | null;
+  /** Rough preparation time in minutes. */
+  prepMinutes?: number | null;
+  /** Ingredients or composition, free text. */
+  ingredients?: string;
 }
 
 /** A purchasable size/variant of a menu item, e.g. Small / Large. */
@@ -393,6 +422,35 @@ export interface SaleRecord extends BaseEntity {
    * but excluded from every total, report and cash-flow figure.
    */
   cancelledAt?: ISODateString | null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Purchases (stock receiving)                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * One recorded stock receipt.
+ *
+ * It records what was received and from whom, and is never edited afterwards:
+ * a mistake is corrected by recording an adjustment, so the receiving history
+ * stays an audit trail like the sales ledger.
+ */
+export interface PurchaseRecord extends BaseEntity {
+  /** Stock line that was topped up, or null if the line was deleted later. */
+  inventoryId: ID | null;
+  /** Name copied at receipt time so history survives an item rename. */
+  itemName: string;
+  quantity: number;
+  /** Unit cost in paisa at the time of receipt, or null when unknown. */
+  unitCost: Paisa | null;
+  supplier: string;
+  /** Invoice or delivery-note number, free text. */
+  reference: string;
+  note: string;
+  /** When the stock physically arrived (ISO). */
+  receivedAt: ISODateString;
+  /** Quantity on hand after this receipt, for a readable history. */
+  quantityAfter: number;
 }
 
 /* ------------------------------------------------------------------ */

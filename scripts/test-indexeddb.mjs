@@ -99,6 +99,20 @@ const fixtures = {
       afterLine: { itemId: 'line-1', name: 'Burger', quantity: 1, lineTotal: 900 },
     },
   ],
+  purchases: [
+    {
+      ...base('purchase-1'),
+      inventoryId: 'stock-burger',
+      itemName: 'Patties',
+      quantity: 24,
+      unitCost: 15000,
+      supplier: 'Local supplier',
+      reference: 'INV-77',
+      note: '',
+      receivedAt: '2026-10-02T09:00:00.000Z',
+      quantityAfter: 36,
+    },
+  ],
 };
 
 for (const [store, records] of Object.entries(fixtures)) {
@@ -117,6 +131,8 @@ await db.put(STORES.syncQueue, localQueue);
 const backup = JSON.parse(JSON.stringify(await dataPortService.exportBackup()));
 const expectedStores = Object.keys(fixtures);
 if (JSON.stringify(Object.keys(backup.stores)) !== JSON.stringify(expectedStores)) {
+  console.error('expected', expectedStores);
+  console.error('actual  ', Object.keys(backup.stores));
   throw new Error('Export did not include each business store in schema order.');
 }
 if (Object.hasOwn(backup.stores, 'admin') || Object.hasOwn(backup.stores, 'syncQueue')) {
@@ -129,7 +145,7 @@ if (backup.stores.sales[0].orderId !== backup.stores.orders[0].id) {
   throw new Error('Export broke the sale/order relationship.');
 }
 const preview = dataPortService.previewBackup(backup);
-if (preview.totalRecords !== 15 || preview.storeCounts.itemPrices !== 1) {
+if (preview.totalRecords !== 16 || preview.storeCounts.itemPrices !== 1) {
   throw new Error('Backup preview returned incorrect record counts.');
 }
 if (!Object.hasOwn(preview.excludedStores, 'admin') || !Object.hasOwn(preview.excludedStores, 'syncQueue')) {
@@ -226,5 +242,5 @@ if (await db.get(STORES.menuItems, 'must-not-partially-write')) {
 }
 
 console.log(
-  'IndexedDB checks passed: isolated schema migration, 14-store export snapshot, relationship preservation, backup preview/exclusions, safe merge and monotonic sequence, unique-conflict preflight, local credential/queue preservation, and atomic rollback.',
+  'IndexedDB checks passed: isolated schema migration, 15-store export snapshot, relationship preservation, backup preview/exclusions, safe merge and monotonic sequence, unique-conflict preflight, local credential/queue preservation, and atomic rollback.',
 );

@@ -13,6 +13,10 @@ export interface AuthUser {
   role: 'admin';
   lastLoginAt?: ISODateString | null;
   mustChangePassword: boolean;
+  /** Optional display name, falling back to the username in the UI. */
+  displayName?: string;
+  email?: string;
+  phone?: string;
 }
 
 /** Persisted session. Holds no credential material. */

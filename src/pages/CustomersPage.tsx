@@ -27,19 +27,48 @@ type Mode =
   | { kind: 'form'; editing?: CustomerRecord }
   | { kind: 'detail'; customer: CustomerRecord };
 
+const PAGE_SIZE = 12;
+
 export default function CustomersPage() {
   const { customers, loading } = useCustomers();
   const [mode, setMode] = useState<Mode>({ kind: 'list' });
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [stats, setStats] = useState<Map<string, CustomerStats>>(new Map());
+
+  // One pass over the orders store for every row, rather than one query per
+  // customer. Refreshed when the customer set changes.
+  useEffect(() => {
+    let active = true;
+    void customerService
+      .statsForAll()
+      .then((map) => {
+        if (active) setStats(map);
+      })
+      .catch(() => {
+        /* the table falls back to dashes if stats cannot be read */
+      });
+    return () => {
+      active = false;
+    };
+  }, [customers]);
 
   const term = query.trim().toLowerCase();
   const visible = term
     ? customers.filter(
         (c) =>
           c.name.toLowerCase().includes(term) ||
-          (c.phone ?? '').toLowerCase().includes(term),
+          (c.phone ?? '').toLowerCase().includes(term) ||
+          (c.email ?? '').toLowerCase().includes(term),
       )
     : customers;
+
+  const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageRows = visible.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
 
   if (mode.kind === 'form') {
     return (
@@ -90,35 +119,119 @@ export default function CustomersPage() {
         />
       ) : (
         <div className={styles.stack}>
-          <Input
-            label="Search customers"
-            name="customerSearch"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Name or phone"
-            autoComplete="off"
-            fullWidth
-          />
+          <div className={styles.toolbar}>
+            <Input
+              label="Search customers"
+              name="customerSearch"
+              value={query}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Name, phone or email"
+              autoComplete="off"
+              fullWidth
+            />
+            <span className={styles.count}>
+              {visible.length} of {customers.length}
+            </span>
+          </div>
 
-          <ul className={styles.list}>
-            {visible.map((customer) => (
-              <li key={customer.id} className={styles.row}>
-                <button
-                  type="button"
-                  className={styles.rowButton}
-                  onClick={() => setMode({ kind: 'detail', customer })}
-                >
-                  <span className={styles.name}>{customer.name}</span>
-                  <span className={styles.meta}>
-                    {customer.phone ?? 'No phone'}
-                  </span>
-                </button>
-              </li>
-            ))}
-            {visible.length === 0 ? (
-              <li className={styles.emptyRow}>No customer matches “{query}”.</li>
-            ) : null}
-          </ul>
+          {visible.length === 0 ? (
+            <p className={styles.emptyRow}>No customer matches “{query}”.</p>
+          ) : (
+            <div className={styles.tableWrap}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th scope="col">Customer</th>
+                    <th scope="col">Phone</th>
+                    <th scope="col">Email</th>
+                    <th scope="col" className={styles.numeric}>
+                      Orders
+                    </th>
+                    <th scope="col" className={styles.numeric}>
+                      Spent
+                    </th>
+                    <th scope="col">Last order</th>
+                    <th scope="col">
+                      <span className={styles.visuallyHidden}>Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map((customer) => {
+                    const stat = stats.get(customer.id);
+                    return (
+                      <tr key={customer.id}>
+                        <td>
+                          <button
+                            type="button"
+                            className={styles.nameButton}
+                            onClick={() => setMode({ kind: 'detail', customer })}
+                          >
+                            <span className={styles.avatar} aria-hidden="true">
+                              {customer.name.slice(0, 1).toUpperCase()}
+                            </span>
+                            <span className={styles.name}>{customer.name}</span>
+                          </button>
+                        </td>
+                        <td>{customer.phone || '-'}</td>
+                        <td className={styles.truncate}>{customer.email || '-'}</td>
+                        <td className={styles.numeric}>{stat?.orderCount ?? 0}</td>
+                        <td className={styles.numeric}>
+                          {stat ? formatMoney(stat.totalSpent) : '-'}
+                        </td>
+                        <td>
+                          {stat?.lastOrderAt ? formatDate(stat.lastOrderAt) : '-'}
+                        </td>
+                        <td className={styles.rowActions}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setMode({ kind: 'detail', customer })}
+                          >
+                            View
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setMode({ kind: 'form', editing: customer })}
+                          >
+                            Edit
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {pageCount > 1 ? (
+            <div className={styles.pagination}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPage((value) => Math.max(1, value - 1))}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </Button>
+              <span className={styles.pageLabel}>
+                Page {currentPage} of {pageCount}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPage((value) => Math.min(pageCount, value + 1))}
+                disabled={currentPage === pageCount}
+              >
+                Next
+              </Button>
+            </div>
+          ) : null}
         </div>
       )}
     </div>

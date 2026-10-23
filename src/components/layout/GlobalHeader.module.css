@@ -4,11 +4,18 @@
   justify-content: space-between;
   gap: var(--sp-4);
   flex-shrink: 0;
-  min-height: 54px;
+  min-height: 58px;
   padding: var(--sp-2) var(--sp-5);
   padding-top: calc(var(--sp-2) + var(--safe-top));
   background-color: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
+}
+
+.leading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-3);
+  min-width: 0;
 }
 
 .restaurantName {
@@ -16,15 +23,42 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--color-text-secondary);
-  font-size: var(--fs-sm);
+  color: var(--color-text);
+  font-size: var(--fs-md);
   font-weight: var(--fw-semibold);
-  letter-spacing: var(--tracking-wide);
+  letter-spacing: var(--tracking-tight);
+}
+
+.sectionName {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  font-size: var(--fs-xs);
+}
+
+.trailing {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.signedInAs {
+  color: var(--color-text-faint);
+  font-size: var(--fs-2xs);
+}
+
+@media (max-width: 900px) {
+  .signedInAs {
+    display: none;
+  }
 }
 
 @media (max-width: 639px) {
   .header {
     padding: var(--sp-2) var(--sp-4);
     padding-top: calc(var(--sp-2) + var(--safe-top));
+  }
+
+  .sectionName {
+    display: none;
   }
 }

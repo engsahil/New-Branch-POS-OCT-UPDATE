@@ -197,7 +197,10 @@ const routes = [
   ['/customers', 'Customers'],
   ['/menu', 'Menu'],
   ['/inventory', 'Inventory'],
-  ['/admin', 'Admin'],
+  ['/admin', 'Settings'],
+  ['/purchases', 'Purchases'],
+  ['/reports', 'Reports'],
+  ['/profile', 'My profile'],
   ['/', 'POS'],
 ];
 
@@ -214,11 +217,11 @@ for (const [route, expected] of routes) {
 // Customisation panel: hide one Dashboard block, save, and confirm it persisted.
 history.pushState({}, '', '/admin');
 window.dispatchEvent(new window.PopStateEvent('popstate'));
-const settingsTab = await waitFor(
-  () => document.getElementById('admin-tab-settings'),
-  'Admin settings tab',
+const appearanceTab = await waitFor(
+  () => document.getElementById('admin-tab-appearance'),
+  'Appearance tab',
 );
-settingsTab.click();
+appearanceTab.click();
 await waitFor(
   () => document.body.textContent.includes('Dashboard and order list'),
   'display customisation card',
@@ -253,6 +256,12 @@ if (storedDisplay?.value?.dashboard?.bestSellers !== false) {
   throw new Error('Saving the display switches did not persist.');
 }
 console.log('PASS  display customisation saves to the settings store');
+
+// Only one primary dashboard: the Settings area must not carry its own.
+if (document.getElementById('admin-tab-dashboard')) {
+  throw new Error('A second Dashboard section still exists in Settings.');
+}
+console.log('PASS  Settings has no duplicate dashboard section');
 
 if (!document.querySelector('[data-tour="notifications"]')) {
   throw new Error('The notification bell is missing from the application header.');

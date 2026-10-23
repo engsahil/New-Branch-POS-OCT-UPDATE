@@ -145,6 +145,17 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 8,
+    description:
+      'Purchases store for recorded stock receipts. Additive only: no existing ' +
+      'store, record or index is touched.',
+    run: (ctx) => {
+      for (const schema of STORE_SCHEMAS) {
+        ensureStore(ctx, schema);
+      }
+    },
+  },
 ];
 
 /** Apply every migration newer than the database's current version. */

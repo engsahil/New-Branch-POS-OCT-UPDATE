@@ -40,8 +40,13 @@ function toUser(record: AdminCredentials): AuthUser {
     role: 'admin',
     lastLoginAt: record.lastLoginAt ?? null,
     mustChangePassword: record.mustChangePassword,
+    displayName: record.displayName ?? '',
+    email: record.email ?? '',
+    phone: record.phone ?? '',
   };
 }
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 async function readCredentials(): Promise<AdminCredentials | undefined> {
   return adminRepository.getById(ADMIN_CREDENTIALS_ID);
@@ -245,6 +250,37 @@ export const authService = {
    * Change username and/or password. Requires the current password.
    * Used by Admin settings.
    */
+  /**
+   * Save the administrator's contact details.
+   *
+   * Independent of credentials: this never touches the password, the username
+   * or the session, so it cannot be used to weaken account security.
+   */
+  async updateProfile(input: {
+    displayName: string;
+    email: string;
+    phone: string;
+  }): Promise<{ ok: boolean; error?: string }> {
+    const record = await ensureBootstrapped();
+    const email = input.email.trim();
+    const phone = input.phone.trim();
+
+    if (email && !EMAIL_PATTERN.test(email)) {
+      return { ok: false, error: 'Enter a valid email address.' };
+    }
+    if (phone && phone.replace(/\D/g, '').length < 6) {
+      return { ok: false, error: 'Enter a valid phone number.' };
+    }
+
+    await adminRepository.update(record.id, {
+      displayName: input.displayName.trim().slice(0, 60),
+      email: email.slice(0, 120),
+      phone: phone.slice(0, 30),
+    } as Partial<AdminCredentials>);
+
+    return { ok: true };
+  },
+
   async changeCredentials(input: {
     currentPassword: string;
     newUsername?: string;

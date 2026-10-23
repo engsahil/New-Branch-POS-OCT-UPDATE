@@ -56,6 +56,45 @@ notes below take precedence.
   stock movement and refusal cases, setup detection, and display preferences
   (persist, merge with defaults, reset).
 
+## v5.1.9 — interface conversion
+
+The screens were rebuilt against the supplied reference design. Business logic,
+storage and routes are unchanged; only presentation plus the few genuinely new
+capabilities below were added.
+
+- **One dashboard.** `/dashboard` is the only dashboard; the duplicate
+  "Dashboard" section was removed from the Settings area. The dashboard now has
+  a hero banner, KPI cards with real day-over-day deltas, a sales trend line,
+  order-type and payment-method doughnuts, top selling items, recent orders
+  (click to open the real receipt) and quick actions to every module.
+- **Banner image.** Settings → Restaurant has a banner picker: upload, replace,
+  preview and remove, centre-cropped to 16:5 and re-encoded before storage, so a
+  phone photo becomes a ~100 KB image in the restaurant record. A tagline line
+  can be set beside it. No banner means a plain themed header — no stock photo.
+- **Administrator menu and profile.** The header shows the account menu (My
+  profile, Settings, Sign out). `/profile` shows username, role, email, phone,
+  last sign-in and the restaurant, and saves display name, email and phone to
+  the admin record. Passwords are never read or displayed there.
+- **Navigation** now matches the reference: Dashboard, POS, Sales, Customers,
+  Menu, Deals, Inventory, Purchases, Reports, Delivery, Settings. Every entry opens
+  a working module. Reports reuses the sales report screen; Settings is the
+  former Admin panel.
+- **Purchases.** New `/purchases` screen records stock receipts: it increases the
+  chosen inventory line and stores the receipt (item, quantity, unit cost,
+  supplier, reference, note, resulting quantity) in a new additive `purchases`
+  store. Impossible adjustments are refused and change nothing.
+- **Customers.** Now a table with name, phone, email, order count, spend, last
+  order, search across all three fields, pagination, and View/Edit actions. Spend
+  and counts come from one pass over the orders store (`statsForAll`), not one
+  query per row.
+- **Menu items** gained optional SKU, barcode, cost price, preparation time and
+  ingredients. Cost price is compared with the selling price in the form; none
+  of these fields changes checkout pricing.
+- **Charts** are hand-drawn SVG (`src/components/charts`) — a trend line and a
+  doughnut — with no charting dependency, no animation and accessible summaries.
+- **Database v8** adds the `purchases` store. Additive only, and older backups
+  restore because the store is optional in the backup manifest.
+
 ## Verification (v5.1.9)
 
 Every command below was executed in this working tree; the results are
@@ -66,7 +105,7 @@ reproduced verbatim from the run, not predicted.
 | Types | `npx tsc -b --noEmit` | exit 0, no diagnostics |
 | Unit/service tests | `npm test` | 4 suites pass (IndexedDB, data port, receipts, v5.1.9) |
 | Production build | `npm run build` | typecheck + build succeed, 52 precached files |
-| UI smoke (development only) | `node scripts/smoke-ui.mjs` | mounts, signs in, renders 7 routes, bell present, wizard skipped, no console errors |
+| UI smoke (development only) | `node scripts/smoke-ui.mjs` | mounts, signs in, renders 10 routes, settings/appearance save, no duplicate dashboard, bell present, wizard skipped, no console errors |
 
 `npm test` is dependency-free and offline. The UI smoke run needs two
 development-only packages that are **not** in `package.json`:
@@ -80,9 +119,11 @@ npm run build                                          # rebuild without the tes
 
 The smoke run loads the built bundle in Happy DOM against a fake IndexedDB,
 signs in through the real form, then visits `/dashboard`, `/sales`,
-`/customers`, `/menu`, `/inventory`, `/admin` and `/`, asserting each screen
-renders and that nothing logs a console error. It is not a substitute for a
-browser: layout, CSS painting and printing still require a real device.
+`/customers`, `/menu`, `/inventory`, `/admin`, `/purchases`, `/reports`,
+`/profile` and `/`, asserting each screen renders, that the appearance switches
+persist, that Settings has no second dashboard, and that nothing logs a console
+error. It is not a substitute for a browser: layout, CSS painting and printing
+still require a real device.
 
 **Not verified:** no physical thermal printer, no browser, and no touch device
 were available in this environment. Printing is verified at the calculation and
@@ -160,6 +201,7 @@ src/
     sales/               SummaryCard, WeekChart
     menu/                MenuItemForm, MenuItemList
     onboarding/           SetupWizard (first run), AppTour (guided tour)
+    charts/              TrendChart (SVG line), DonutChart (SVG ring)
     ui/                  Button, Card, EmptyState, Input, Spinner, Textarea,
                          Icons
   content/
@@ -179,7 +221,7 @@ src/
                          useCart, useSales, useCustomers, useSyncStatus,
                          useInstallState, useNotifications, useDisplayPreferences
   pages/                 Login, Dashboard, Pos, Sales, Customers, Menu, Deals,
-                         Inventory, Delivery, Admin, NotFound
+                         Inventory, Purchases, Delivery, Admin, Profile, NotFound
   services/              authService (login, session, credentials)
                          customerService (records, stats, order history),
                          databaseService (startup, diagnostics, reset)
@@ -189,7 +231,8 @@ src/
                          printerService, receiptService, receiptEditService,
                          restaurantService, salesService, settingsService,
                          notificationService, onboardingService,
-                         displayPreferencesService, syncQueueService
+                         displayPreferencesService, purchaseService,
+                         syncQueueService
   pwa/                   service worker registration, sw.template.js,
                          installService (install capability detection)
   styles/                tokens.css, reset.css, global.css, print.css
@@ -199,7 +242,7 @@ src/
 
 ## Local database
 
-All data lives in IndexedDB (`pos-db`, version 7) so the terminal keeps working
+All data lives in IndexedDB (`pos-db`, version 8) so the terminal keeps working
 without a network connection. There is no demo data — the database starts
 completely empty apart from the admin account created on first sign-in.
 

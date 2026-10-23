@@ -13,6 +13,15 @@ export const LOGO_MAX_EDGE = 512;
 /** Longest edge of a menu item photo. Smaller: it renders as a POS tile. */
 export const ITEM_IMAGE_MAX_EDGE = 400;
 
+/**
+ * Longest edge of the dashboard hero banner.
+ *
+ * Wide screens render the banner about 1100 CSS pixels across; 1600 keeps it
+ * sharp on a 2x display while the compressed result stays well under ~250 KB,
+ * so it is read from IndexedDB with the profile rather than fetched again.
+ */
+export const BANNER_MAX_EDGE = 1600;
+
 /** Reject absurd uploads early, before decoding. */
 export const LOGO_MAX_SOURCE_BYTES = 8 * 1024 * 1024;
 
@@ -82,6 +91,12 @@ function canvasToDataUrl(
 export async function optimiseImage(
   file: File,
   maxEdge: number = LOGO_MAX_EDGE,
+  /**
+   * Optional width / height ratio. When given, the source is centre-cropped to
+   * that ratio before scaling — this is the banner's "crop" step, and it means
+   * a phone photo with odd proportions still fills the hero without distortion.
+   */
+  aspect?: number,
 ): Promise<OptimisedImage> {
   if (file.size > LOGO_MAX_SOURCE_BYTES) {
     throw new Error('That image is larger than 8 MB. Please choose a smaller file.');
@@ -108,9 +123,26 @@ export async function optimiseImage(
     throw new Error('That file is not a valid image.');
   }
 
-  const scale = Math.min(1, maxEdge / Math.max(sourceW, sourceH));
-  const width = Math.max(1, Math.round(sourceW * scale));
-  const height = Math.max(1, Math.round(sourceH * scale));
+  // Centre-crop to the requested ratio, then scale to fit `maxEdge`.
+  let cropW = sourceW;
+  let cropH = sourceH;
+  let cropX = 0;
+  let cropY = 0;
+
+  if (aspect && aspect > 0) {
+    const sourceRatio = sourceW / sourceH;
+    if (sourceRatio > aspect) {
+      cropW = Math.round(sourceH * aspect);
+      cropX = Math.round((sourceW - cropW) / 2);
+    } else if (sourceRatio < aspect) {
+      cropH = Math.round(sourceW / aspect);
+      cropY = Math.round((sourceH - cropH) / 2);
+    }
+  }
+
+  const scale = Math.min(1, maxEdge / Math.max(cropW, cropH));
+  const width = Math.max(1, Math.round(cropW * scale));
+  const height = Math.max(1, Math.round(cropH * scale));
 
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -121,7 +153,7 @@ export async function optimiseImage(
 
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(img, 0, 0, width, height);
+  ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, width, height);
 
   const candidates = [
     { url: canvasToDataUrl(canvas, 'image/webp', 0.86), type: 'image/webp' },

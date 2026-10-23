@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthContext';
 import { ROUTE_PATHS } from '@/app/routes';
+import { CHART_COLORS, DonutChart, TrendChart } from '@/components/charts/Charts';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { OrderReceiptDialog } from '@/components/receipt/OrderReceiptDialog';
 import { Button, EmptyState, Input } from '@/components/ui';
@@ -392,15 +393,16 @@ export default function SalesPage() {
               </p>
 
               <div className={styles.chartGrid}>
-                <section className={styles.card} aria-label="Sales by day">
-                  <h2 className={styles.cardTitle}>Sales by day</h2>
-                  <BarRows
-                    rows={report.byDay.map((entry) => ({
+                <section className={styles.card} aria-label="Sales trend">
+                  <h2 className={styles.cardTitle}>Sales trend</h2>
+                  <TrendChart
+                    points={report.byDay.map((entry) => ({
                       label: entry.label,
                       value: entry.amount,
-                      detail: `${entry.orderCount} order${entry.orderCount === 1 ? '' : 's'}`,
                     }))}
-                    currency
+                    summary={`Sales by day: ${report.byDay
+                      .map((entry) => `${entry.label} ${formatMoney(entry.amount)}`)
+                      .join(', ')}`}
                   />
                 </section>
 
@@ -421,25 +423,37 @@ export default function SalesPage() {
 
                 <section className={styles.card} aria-label="Payment methods">
                   <h2 className={styles.cardTitle}>Payment methods</h2>
-                  <BarRows
-                    rows={report.byPayment.map((entry) => ({
-                      label: entry.label,
+                  <DonutChart
+                    slices={report.byPayment.map((entry, index) => ({
+                      label: formatPaymentMethod(entry.label),
                       value: entry.amount,
-                      detail: `${entry.orderCount}`,
+                      count: entry.orderCount,
+                      color: CHART_COLORS[(index + 1) % CHART_COLORS.length]!,
                     }))}
-                    currency
+                    centreValue={formatMoney(report.netSales, { withSymbol: false })}
+                    centreLabel="received"
+                    formatValue={(value) => formatMoney(value, { withSymbol: false })}
+                    summary={`Payments: ${report.byPayment
+                      .map((entry) => `${entry.label} ${formatMoney(entry.amount)}`)
+                      .join(', ')}`}
                   />
                 </section>
 
                 <section className={styles.card} aria-label="Order types">
                   <h2 className={styles.cardTitle}>Order types</h2>
-                  <BarRows
-                    rows={report.byOrderType.map((entry) => ({
+                  <DonutChart
+                    slices={report.byOrderType.map((entry, index) => ({
                       label: entry.label,
                       value: entry.amount,
-                      detail: `${entry.orderCount}`,
+                      count: entry.orderCount,
+                      color: CHART_COLORS[index % CHART_COLORS.length]!,
                     }))}
-                    currency
+                    centreValue={String(report.orderCount)}
+                    centreLabel="orders"
+                    formatValue={(value) => formatMoney(value, { withSymbol: false })}
+                    summary={`Order types: ${report.byOrderType
+                      .map((entry) => `${entry.label} ${formatMoney(entry.amount)}`)
+                      .join(', ')}`}
                   />
                 </section>
 

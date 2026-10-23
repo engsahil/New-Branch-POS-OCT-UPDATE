@@ -50,8 +50,13 @@ export const TOUR_STEPS = [
   },
   {
     target: 'nav-admin',
-    title: 'Admin',
-    body: 'Restaurant profile, printer and receipt settings, security and application settings live here.',
+    title: 'Settings',
+    body: 'Restaurant profile and banner, appearance, printer and receipt settings, security and back-ups live here.',
+  },
+  {
+    target: 'nav-purchases',
+    title: 'Purchases',
+    body: 'Record stock as it arrives; each receipt updates the inventory line and keeps its own history.',
   },
   {
     target: 'notifications',
