@@ -252,8 +252,11 @@ export default function DashboardPage() {
   ];
 
   // Banner content stays minimal: the restaurant name and a short greeting
-  // (plus the configured tagline, if one exists). No statistics or actions.
-  const restaurantName = profile?.name?.trim() || 'Welcome back';
+  // (plus the configured tagline, if one exists). No statistics, no actions
+  // and no setup instructions — the reminder above already covers those, so
+  // a terminal with no name yet simply greets the operator.
+  const restaurantName = profile?.name?.trim() || '';
+  const greeting = 'Welcome back.';
   const customBanner = profile?.banner?.dataUrl ? profile.banner : null;
 
   return (
@@ -330,12 +333,10 @@ export default function DashboardPage() {
         />
         <div className={styles.heroOverlay}>
           <div className={styles.heroText}>
-            <h2 className={styles.heroTitle}>{restaurantName}</h2>
-            <p className={styles.heroLine}>
-              {profile?.name?.trim()
-                ? 'Welcome back.'
-                : 'Add your restaurant name in Settings.'}
-            </p>
+            <h2 className={styles.heroTitle}>{restaurantName || greeting}</h2>
+            {restaurantName ? (
+              <p className={styles.heroLine}>{greeting}</p>
+            ) : null}
             {profile?.tagline ? (
               <p className={styles.heroTagline}>{profile.tagline}</p>
             ) : null}

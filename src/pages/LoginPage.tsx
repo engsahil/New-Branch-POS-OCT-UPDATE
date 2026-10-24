@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthContext';
+import { ROUTE_PATHS } from '@/app/routes';
 import { APP_CONFIG } from '@/config/app.config';
 import { Button, Input, Spinner } from '@/components/ui';
 import {
@@ -49,6 +50,20 @@ export default function LoginPage() {
     ? 'Account created successfully. Please sign in.'
     : (state?.notice ?? null);
 
+  /*
+   * Where a successful sign-in goes.
+   *
+   * The intended flow is Setup -> Sign-In -> Dashboard, so a plain visit to
+   * the app opens the Dashboard rather than dropping the operator straight
+   * onto the till. A visitor redirected here from a protected URL still
+   * returns to exactly that URL; the index path ('/') is not a deep link,
+   * so it is treated as a plain visit.
+   */
+  const destination =
+    state?.from && state.from !== ROUTE_PATHS.pos
+      ? state.from
+      : ROUTE_PATHS.dashboard;
+
   useEffect(() => {
     if (state?.username) {
       passwordRef.current?.focus();
@@ -63,9 +78,10 @@ export default function LoginPage() {
     return <Spinner fullscreen label="Checking session" />;
   }
 
-  // Already signed in — bounce to wherever they were headed.
+  // Already signed in — bounce to wherever they were headed, or the
+  // Dashboard when they simply opened the app.
   if (isAuthenticated) {
-    return <Navigate to={state?.from ?? '/'} replace />;
+    return <Navigate to={destination} replace />;
   }
 
   // No account exists yet on this terminal: the first screen is Sign-Up,
@@ -106,7 +122,7 @@ export default function LoginPage() {
         return;
       }
 
-      navigate(state?.from ?? '/', { replace: true });
+      navigate(destination, { replace: true });
     } catch (err) {
       setError(
         err instanceof Error
