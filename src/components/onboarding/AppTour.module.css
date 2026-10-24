@@ -1,7 +1,15 @@
-/* A highlighted outline around the real control; the page stays interactive. */
+/*
+ * A highlighted outline around the real control; the page stays interactive.
+ *
+ * Layering: the tour is a non-modal guide, so it sits at the overlay layer
+ * (above navigation, below --z-modal). At the toast layer it used to cover
+ * modal dialogs — including the receipt dialog's print actions on narrow
+ * screens. When a dialog is open the guide is simply behind it and is
+ * there again once the dialog closes.
+ */
 .ring {
   position: fixed;
-  z-index: var(--z-toast);
+  z-index: var(--z-overlay);
   border: 2px solid var(--color-primary);
   border-radius: var(--radius-lg);
   box-shadow: 0 0 0 4px rgb(23 107 77 / 16%);
@@ -15,7 +23,7 @@
 
 .card {
   position: fixed;
-  z-index: calc(var(--z-toast) + 1);
+  z-index: calc(var(--z-overlay) + 1);
   width: 300px;
   padding: var(--sp-4);
   background-color: var(--color-surface);

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthContext';
-import { authService } from '@/services/authService';
 import { APP_CONFIG } from '@/config/app.config';
 import { Button, Input, Spinner } from '@/components/ui';
 import {
   AlertIcon,
+  CheckIcon,
   EyeIcon,
   EyeOffIcon,
   LockIcon,
@@ -15,49 +15,63 @@ import styles from './LoginPage.module.css';
 
 interface LocationState {
   from?: string;
+  /** Set right after the one-time Sign-Up, to confirm and prefill. */
+  accountCreated?: boolean;
+  /** Generic one-line notice (e.g. setup was completed in another tab). */
+  notice?: string;
+  username?: string;
+  /**
+   * Set by the Sign-Up screen after the service has verified the account
+   * is persisted. Prevents a one-render bounce back to /setup while the
+   * auth context's setup flag is still catching up after navigation.
+   */
+  setupComplete?: boolean;
 }
 
 export default function LoginPage() {
-  /*
-   * On a brand-new terminal the application generates a one-time setup
-   * password rather than shipping a known one in the bundle. It is shown
-   * here once so the installer can sign in.
-   */
-  const [setupPassword, setSetupPassword] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    void authService.ensureBootstrapped().then(() => {
-      if (active) setSetupPassword(authService.getSetupPassword());
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const { status, isAuthenticated, login } = useAuth();
+  const { status, isAuthenticated, needsInitialSetup, login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const usernameRef = useRef<HTMLInputElement>(null);
+  const state = (location.state as LocationState | null) ?? null;
 
-  const [username, setUsername] = useState('');
+  const usernameRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+
+  // Right after Sign-Up the username is known: prefill it so the operator
+  // only has to type the password they just set.
+  const [username, setUsername] = useState(state?.username ?? '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  const notice = state?.accountCreated
+    ? 'Account created successfully. Please sign in.'
+    : (state?.notice ?? null);
+
   useEffect(() => {
-    usernameRef.current?.focus();
+    if (state?.username) {
+      passwordRef.current?.focus();
+    } else {
+      usernameRef.current?.focus();
+    }
+    // Focus once on mount; the location state does not change under us.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (status === 'initialising') {
+  if (status === 'initialising' || needsInitialSetup === null) {
     return <Spinner fullscreen label="Checking session" />;
   }
 
   // Already signed in — bounce to wherever they were headed.
   if (isAuthenticated) {
-    const target = (location.state as LocationState | null)?.from ?? '/';
-    return <Navigate to={target} replace />;
+    return <Navigate to={state?.from ?? '/'} replace />;
+  }
+
+  // No account exists yet on this terminal: the first screen is Sign-Up,
+  // not a login form for credentials nobody has created.
+  if (needsInitialSetup && !state?.setupComplete) {
+    return <Navigate to="/setup" replace state={{ from: state?.from }} />;
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -74,14 +88,25 @@ export default function LoginPage() {
       const result = await login(username, password);
 
       if (!result.ok) {
+        // The account disappeared or was never created (e.g. storage was
+        // cleared in another tab): route to first-run setup.
+        if (result.needsInitialSetup) {
+          navigate('/setup', { replace: true });
+          return;
+        }
+        /*
+         * Wrong credentials: show the error and hand the form straight
+         * back. There is no cooldown, countdown or lockout — the next
+         * attempt can be made immediately.
+         */
         setError(result.error ?? 'Sign in failed.');
         setPassword('');
         setSubmitting(false);
+        passwordRef.current?.focus();
         return;
       }
 
-      const target = (location.state as LocationState | null)?.from ?? '/';
-      navigate(target, { replace: true });
+      navigate(state?.from ?? '/', { replace: true });
     } catch (err) {
       setError(
         err instanceof Error
@@ -113,17 +138,11 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {setupPassword ? (
-          <div className={styles.setup} role="status">
-            <p className={styles.setupTitle}>First-time setup</p>
-            <p className={styles.setupBody}>
-              Sign in with this one-time password, then set your own. It is
-              shown only once and is not stored anywhere.
-            </p>
-            <p className={styles.setupCode} data-testid="setup-password">
-              {setupPassword}
-            </p>
-          </div>
+        {notice ? (
+          <p className={styles.notice} role="status">
+            <CheckIcon width={16} height={16} className={styles.noticeIcon} />
+            <span>{notice}</span>
+          </p>
         ) : null}
 
         <form className={styles.form} onSubmit={handleSubmit} noValidate>
@@ -145,6 +164,7 @@ export default function LoginPage() {
 
           <div className={styles.passwordField}>
             <Input
+              ref={passwordRef}
               id="password"
               name="password"
               label="Password"

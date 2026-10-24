@@ -35,8 +35,28 @@ export type AuthStatus =
 
 export interface LoginResult {
   ok: boolean;
-  /** Human-readable, deliberately non-specific on failure. */
+  /** Human-readable, deliberately non-specific on credential failure. */
   error?: string;
-  /** Present when the account is temporarily locked. */
-  lockedUntil?: number;
+  /**
+   * Present when sign-in was attempted before any administrator account
+   * exists. The UI routes to the one-time Sign-Up screen in that case.
+   * There is deliberately no lockout/cooldown field: a wrong password may
+   * always be retried immediately.
+   */
+  needsInitialSetup?: boolean;
+}
+
+/** Result of the one-time first-run account creation. */
+export interface CreateInitialAdminResult {
+  ok: boolean;
+  /** Human-readable reason when account creation did not happen. */
+  error?: string;
+  /**
+   * True when account creation was refused because an administrator account
+   * already exists — initial setup is single-use and is never offered again
+   * (including to a second tab submitting at the same moment).
+   */
+  alreadySetUp?: boolean;
+  /** The username that was created. Never carries password material. */
+  username?: string;
 }

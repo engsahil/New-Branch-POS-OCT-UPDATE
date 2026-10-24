@@ -150,22 +150,33 @@
   }
 }
 
-/* Mobile: stack, with the cart below the items. */
+/*
+ * Mobile: stack, with the cart below the items, and let the page scroll.
+ *
+ * This must stay content-height: as a definite-height grid (flex: 1) with
+ * two auto rows whose children carry min-height: 0, the browser compresses
+ * both rows into the viewport, the sticky cart inherits that squeezed row
+ * height, and the cart's line list collapses to 0px — quantities could not
+ * be seen or changed at all. Content height + page scroll keeps every
+ * cart control reachable; the line list caps its own height instead
+ * (see CartPanel). Desktop keeps the bounded side-by-side layout above.
+ */
 @media (max-width: 819px) {
   .layout {
+    flex: none;
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto auto;
-    overflow-y: auto;
+    overflow: visible;
   }
 
   .items {
     overflow: visible;
+    min-height: auto;
     padding-right: 0;
   }
 
   .cart {
-    position: sticky;
-    bottom: 0;
+    position: static;
   }
 }
 

@@ -26,6 +26,16 @@ export interface ImageFieldProps {
   emptyHint?: string;
   /** Distinguishes the preview and file input when several are on a page. */
   idPrefix?: string;
+  /**
+   * Built-in image that is actually in use while no custom image is set.
+   * When supplied, the preview shows it (instead of an empty placeholder)
+   * so the operator always sees the currently active image.
+   */
+  fallbackSrc?: string;
+  /** Explains the fallback state, e.g. "Built-in default banner in use." */
+  fallbackNote?: string;
+  /** Label for clearing the custom image. Defaults to "Remove". */
+  removeLabel?: string;
 }
 
 /**
@@ -44,6 +54,9 @@ export function ImageField({
   uploadLabel = 'Upload image',
   emptyHint,
   idPrefix = 'image',
+  fallbackSrc,
+  fallbackNote,
+  removeLabel = 'Remove',
 }: ImageFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -93,6 +106,13 @@ export function ImageField({
               className={styles.image}
               style={aspect ? { aspectRatio: String(aspect) } : undefined}
             />
+          ) : fallbackSrc ? (
+            <img
+              src={fallbackSrc}
+              alt={`${altText} (built-in default)`}
+              className={styles.image}
+              style={aspect ? { aspectRatio: String(aspect) } : undefined}
+            />
           ) : (
             <span className={styles.placeholder} aria-hidden="true">
               <ImageIcon width={22} height={22} />
@@ -124,7 +144,7 @@ export function ImageField({
                 }}
                 leadingIcon={<TrashIcon width={16} height={16} />}
               >
-                Remove
+                {removeLabel}
               </Button>
             ) : null}
           </div>
@@ -134,8 +154,11 @@ export function ImageField({
               ? `${value.fileName} — ${formatBytes(value.bytes)}${
                   value.width ? ` · ${value.width}x${value.height}` : ''
                 }`
-              : (emptyHint ??
-                `PNG, JPG, WebP or SVG. Resized to ${maxEdge}px and compressed automatically.`)}
+              : fallbackSrc
+                ? (fallbackNote ??
+                  'The built-in default image is currently in use.')
+                : (emptyHint ??
+                  `PNG, JPG, WebP or SVG. Resized to ${maxEdge}px and compressed automatically.`)}
           </p>
 
           {error ? (

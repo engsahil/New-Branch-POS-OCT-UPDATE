@@ -154,10 +154,12 @@ export default function PosPage() {
       });
       cart.clear();
 
-      const autoShow = await settingsService.get<boolean>(
-        SETTING_KEYS.autoShowReceipt,
-        true,
-      );
+      // The order has committed at this point: a failed preference read
+      // must not fall into the catch below and tell the cashier the sale
+      // failed (inviting a duplicate). Default to showing the receipt.
+      const autoShow = await settingsService
+        .get<boolean>(SETTING_KEYS.autoShowReceipt, true)
+        .catch(() => true);
       setCompleted(autoShow ? result : null);
       notifyInventoryChanged();
       notifySalesChanged();

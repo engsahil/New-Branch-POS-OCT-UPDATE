@@ -1,27 +1,38 @@
 /**
  * Authentication service.
  *
- * Owns credential bootstrap, verification, session lifecycle and credential
- * changes. Pure logic with no React dependency so it can be tested directly.
+ * Owns first-run account creation, credential verification, session lifecycle
+ * and credential changes. Pure logic with no React dependency so it can be
+ * tested directly.
  *
  * Security notes:
  *  - Passwords are stored only as PBKDF2-SHA256 hashes with a per-account salt.
+ *  - No account is created automatically. On a fresh installation the
+ *    operator creates the single administrator account on the Sign-Up screen
+ *    (`createInitialAdmin`); anything else asking "who am I?" before that
+ *    point is told initial setup is required instead of being handed a
+ *    silently generated account. (The one exception is a build-time
+ *    provisioned password for test automation / kiosk provisioning — see
+ *    auth.config.ts — which is documented as insecure.)
  *  - Login failures return a single generic message so the response cannot be
  *    used to enumerate valid usernames.
- *  - Repeated failures trigger a temporary lockout.
+ *  - There is deliberately no timed lockout after failed attempts: a wrong
+ *    password is rejected and may be retried immediately. The old lockout was
+ *    a localStorage timer that a physically present attacker could simply
+ *    clear, so it only ever locked out legitimate operators. The PBKDF2 work
+ *    factor on every attempt remains and cannot be switched off.
  */
 
-import {
-  ADMIN_CREDENTIALS_ID,
-  AUTH_CONFIG,
-  generateSetupPassword,
-} from '@/config/auth.config';
-import { adminRepository } from '@/data/repositories';
+import { ADMIN_CREDENTIALS_ID, AUTH_CONFIG } from '@/config/auth.config';
+import { STORES } from '@/config/storage.config';
+import { db } from '@/data/db/indexedDb';
+import { adminRepository, buildEntity } from '@/data/repositories';
 import { sessionStore } from '@/data/storage/sessionStore';
 import type {
   AdminCredentials,
   AuthSession,
   AuthUser,
+  CreateInitialAdminResult,
   LoginResult,
 } from '@/types/auth';
 import {
@@ -33,6 +44,18 @@ import {
 import { nowISO } from '@/utils/date';
 
 const GENERIC_FAILURE = 'Incorrect username or password.';
+const SETUP_REQUIRED =
+  'No administrator account exists yet. Create your account to continue.';
+const ALREADY_SET_UP =
+  'An administrator account has already been set up. Please sign in.';
+
+/**
+ * Usernames for new accounts: letters, digits and the separators an operator
+ * might reasonably use, including `@` for an email-style username. Applied
+ * when the account is created — sign-in always compares against whatever is
+ * stored, so existing accounts are never affected.
+ */
+const USERNAME_PATTERN = /^[\w.@-]+$/;
 
 function toUser(record: AdminCredentials): AuthUser {
   return {
@@ -53,77 +76,46 @@ async function readCredentials(): Promise<AdminCredentials | undefined> {
 }
 
 /**
- * Create the admin account from the configured bootstrap credentials the
- * first time the app runs. Subsequent calls are a no-op, so changing the
- * env vars later never silently resets a live account.
- */
-/**
- * The one-time setup password generated on first run, held in memory only.
+ * Materialise the build-time PROVISIONED account, if one was configured.
  *
- * It is never written to storage in readable form and is discarded once the
- * page is closed. If the installer loses it before signing in, the terminal
- * data must be cleared and set up again - which is the correct trade-off for
- * not shipping a known password in the bundle.
+ * In a normal build `VITE_ADMIN_PASSWORD` is empty and this returns whatever
+ * account the operator created on the Sign-Up screen — or `null` when no
+ * account exists yet. It never generates an account out of thin air.
+ *
+ * When a password WAS provisioned at build time (test automation / kiosk
+ * provisioning), the first call creates that account flagged
+ * `mustChangePassword`, exactly as before. Subsequent calls are a no-op, so
+ * changing the env vars later never silently resets a live account.
  */
-let pendingSetupPassword: string | null = null;
-
-/** The setup password to display, or null once it has been used. */
-export function getSetupPassword(): string | null {
-  return pendingSetupPassword;
-}
-
-async function ensureBootstrapped(): Promise<AdminCredentials> {
+async function ensureBootstrapped(): Promise<AdminCredentials | null> {
   const existing = await readCredentials();
   if (existing) return existing;
 
-  /*
-   * No secret is embedded in the build. Unless a password was explicitly
-   * provisioned at build time, generate a random one-time password and
-   * require it to be changed at first sign-in.
-   */
-  const provisioned = AUTH_CONFIG.usingProvisionedPassword;
-  const password = provisioned
-    ? AUTH_CONFIG.provisionedPassword
-    : generateSetupPassword();
+  if (!AUTH_CONFIG.usingProvisionedPassword) return null;
 
-  if (!provisioned) pendingSetupPassword = password;
-
-  const record = await adminRepository.create({
-    id: ADMIN_CREDENTIALS_ID,
-    username: AUTH_CONFIG.bootstrapUsername,
-    password: await hashPassword(password),
-    role: 'admin',
-    // Either way the operator must set their own password before trading.
-    mustChangePassword: true,
-    lastLoginAt: null,
-  });
-
-  return record;
-}
-
-function lockoutRemaining(): number {
-  const { lockedUntil } = sessionStore.readAttempts();
-  if (!lockedUntil) return 0;
-  const remaining = lockedUntil - Date.now();
-  return remaining > 0 ? remaining : 0;
-}
-
-function registerFailure(): LoginResult {
-  const attempts = sessionStore.readAttempts();
-  const count = attempts.count + 1;
-
-  if (count >= AUTH_CONFIG.maxFailedAttempts) {
-    const lockedUntil = Date.now() + AUTH_CONFIG.lockoutDurationMs;
-    sessionStore.writeAttempts({ count: 0, lockedUntil });
-    return {
-      ok: false,
-      error: 'Too many failed attempts. Try again shortly.',
-      lockedUntil,
-    };
+  try {
+    return await adminRepository.create({
+      id: ADMIN_CREDENTIALS_ID,
+      username: AUTH_CONFIG.bootstrapUsername,
+      password: await hashPassword(AUTH_CONFIG.provisionedPassword),
+      role: 'admin',
+      // The operator must set their own password before trading.
+      mustChangePassword: true,
+      lastLoginAt: null,
+    });
+  } catch {
+    // A concurrent first run may have created the record first.
+    return (await readCredentials()) ?? null;
   }
+}
 
-  sessionStore.writeAttempts({ count, lockedUntil: null });
-  return { ok: false, error: GENERIC_FAILURE };
+/** Read the account for an authenticated-only operation, or fail cleanly. */
+async function requireCredentials(): Promise<AdminCredentials> {
+  const record = await ensureBootstrapped();
+  if (!record) {
+    throw new Error(SETUP_REQUIRED);
+  }
+  return record;
 }
 
 /**
@@ -151,14 +143,135 @@ async function createSession(username: string): Promise<AuthSession> {
 export const authService = {
   ensureBootstrapped,
 
-  /** One-time setup password to display on first run, or null. */
-  getSetupPassword,
+  /**
+   * True when this terminal has no administrator account yet and the
+   * one-time Sign-Up screen must be shown.
+   *
+   * This reads the real persisted account record (IndexedDB) — never a
+   * frontend flag — so the answer stays correct across refreshes, restarts
+   * and updates. A build-time provisioned account counts as set up.
+   */
+  async needsInitialSetup(): Promise<boolean> {
+    return (await ensureBootstrapped()) === null;
+  },
 
-  /** Milliseconds remaining on a lockout, or 0 when not locked. */
-  lockoutRemaining,
+  /**
+   * Create the single administrator account on first run.
+   *
+   *  - Validates username, password length and confirmation server-side
+   *    (well, service-side: never trust the form alone).
+   *  - Stores only a PBKDF2 hash; the plaintext password is never persisted.
+   *  - Writes the record inside a single read-write transaction using
+   *    `add`, so two setup forms submitted at the same moment cannot both
+   *    succeed or overwrite each other — the second is told the account
+   *    already exists.
+   *  - Re-reads the stored record and verifies the hash matches what was
+   *    written before reporting success.
+   *  - Deliberately does NOT create a session: the operator signs in with
+   *    the password they just set, like every later visit.
+   */
+  async createInitialAdmin(input: {
+    displayName?: string;
+    username: string;
+    password: string;
+    confirmPassword: string;
+  }): Promise<CreateInitialAdminResult> {
+    const username = input.username.trim();
+    const displayName = (input.displayName ?? '').trim().slice(0, 60);
+
+    if (username.length < AUTH_CONFIG.minUsernameLength) {
+      return {
+        ok: false,
+        error: `Username must be at least ${AUTH_CONFIG.minUsernameLength} characters.`,
+      };
+    }
+    if (!USERNAME_PATTERN.test(username) || username.length > 40) {
+      return {
+        ok: false,
+        error:
+          'Use only letters, numbers and . _ - @ in the username (maximum 40 characters).',
+      };
+    }
+    if (input.password.length < AUTH_CONFIG.minPasswordLength) {
+      return {
+        ok: false,
+        error: `Password must be at least ${AUTH_CONFIG.minPasswordLength} characters.`,
+      };
+    }
+    if (input.password !== input.confirmPassword) {
+      return { ok: false, error: 'Passwords do not match.' };
+    }
+
+    /*
+     * If an account already exists (created earlier, imported with the
+     * terminal's data, or provisioned at build time) initial setup is
+     * closed. This is what stops open-ended public sign-up: there is
+     * exactly one administrator account and it can be created only once.
+     */
+    const existing = await ensureBootstrapped();
+    if (existing) {
+      return { ok: false, error: ALREADY_SET_UP, alreadySetUp: true };
+    }
+
+    // Hash BEFORE opening the transaction: IndexedDB transactions
+    // auto-commit while they idle, and PBKDF2 takes real time.
+    const hashed = await hashPassword(input.password);
+
+    const record = buildEntity<AdminCredentials>({
+      id: ADMIN_CREDENTIALS_ID,
+      username,
+      password: hashed,
+      role: 'admin',
+      // The operator chose this password; there is no forced rotation.
+      mustChangePassword: false,
+      lastLoginAt: null,
+      displayName,
+      sessionTokenHash: null,
+    });
+
+    try {
+      await db.transaction([STORES.admin], 'readwrite', async (stores) => {
+        const store = stores[STORES.admin];
+        if (!store) throw new Error('Admin store unavailable.');
+        const found = await db.request(store.get(ADMIN_CREDENTIALS_ID));
+        if (found !== undefined) {
+          throw new Error(ALREADY_SET_UP);
+        }
+        // `add` (not `put`) fails loudly instead of overwriting an account
+        // that appeared between the check and the write.
+        await db.request(store.add(record));
+      });
+    } catch (err) {
+      // Lost a simultaneous setup race: the other account wins and this
+      // caller is sent to Sign-In like everyone else.
+      if (await readCredentials()) {
+        return { ok: false, error: ALREADY_SET_UP, alreadySetUp: true };
+      }
+      throw err;
+    }
+
+    // Prove the account really landed in storage before reporting success.
+    const stored = await readCredentials();
+    const persisted =
+      stored !== undefined &&
+      stored.username === username &&
+      stored.password.hash === hashed.hash &&
+      stored.password.salt === hashed.salt;
+    if (!persisted) {
+      return {
+        ok: false,
+        error: 'The account could not be saved. Please try again.',
+      };
+    }
+
+    return { ok: true, username };
+  },
 
   /** Resolve the current user from a stored, unexpired session. */
   async restore(): Promise<AuthUser | null> {
+    // One-time upgrade cleanup: drop a legacy lockout record, if any.
+    sessionStore.clearAttempts();
+
     const session = sessionStore.read();
     if (!session) return null;
 
@@ -201,16 +314,17 @@ export const authService = {
   },
 
   async login(username: string, password: string): Promise<LoginResult> {
-    const remaining = lockoutRemaining();
-    if (remaining > 0) {
-      return {
-        ok: false,
-        error: 'Too many failed attempts. Try again shortly.',
-        lockedUntil: Date.now() + remaining,
-      };
-    }
+    /*
+     * No lockout gate, no failure counter: every attempt is verified against
+     * the stored hash on its own merits, so an operator who mistypes can
+     * retry immediately while wrong credentials never authenticate.
+     */
+    sessionStore.clearAttempts();
 
     const record = await ensureBootstrapped();
+    if (!record) {
+      return { ok: false, error: SETUP_REQUIRED, needsInitialSetup: true };
+    }
 
     const usernameMatches =
       record.username.toLowerCase() === username.trim().toLowerCase();
@@ -218,10 +332,9 @@ export const authService = {
 
     // Both checks always run so timing does not reveal which one failed.
     if (!usernameMatches || !passwordMatches) {
-      return registerFailure();
+      return { ok: false, error: GENERIC_FAILURE };
     }
 
-    sessionStore.clearAttempts();
     sessionStore.write(await createSession(record.username));
 
     await adminRepository.update(record.id, { lastLoginAt: nowISO() });
@@ -247,10 +360,6 @@ export const authService = {
   },
 
   /**
-   * Change username and/or password. Requires the current password.
-   * Used by Admin settings.
-   */
-  /**
    * Save the administrator's contact details.
    *
    * Independent of credentials: this never touches the password, the username
@@ -261,7 +370,7 @@ export const authService = {
     email: string;
     phone: string;
   }): Promise<{ ok: boolean; error?: string }> {
-    const record = await ensureBootstrapped();
+    const record = await requireCredentials();
     const email = input.email.trim();
     const phone = input.phone.trim();
 
@@ -281,12 +390,16 @@ export const authService = {
     return { ok: true };
   },
 
+  /**
+   * Change username and/or password. Requires the current password.
+   * Used by Admin settings.
+   */
   async changeCredentials(input: {
     currentPassword: string;
     newUsername?: string;
     newPassword?: string;
   }): Promise<{ ok: boolean; error?: string }> {
-    const record = await ensureBootstrapped();
+    const record = await requireCredentials();
 
     const valid = await verifyPassword(input.currentPassword, record.password);
     if (!valid) {
@@ -294,8 +407,11 @@ export const authService = {
     }
 
     const nextUsername = input.newUsername?.trim() || record.username;
-    if (nextUsername.length < 3) {
-      return { ok: false, error: 'Username must be at least 3 characters.' };
+    if (nextUsername.length < AUTH_CONFIG.minUsernameLength) {
+      return {
+        ok: false,
+        error: `Username must be at least ${AUTH_CONFIG.minUsernameLength} characters.`,
+      };
     }
 
     let password = record.password;
@@ -317,9 +433,6 @@ export const authService = {
       password,
       mustChangePassword,
     });
-
-    // The one-time setup password is spent.
-    pendingSetupPassword = null;
 
     /*
      * A password change must not leave an old session usable. Re-bind the

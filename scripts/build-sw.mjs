@@ -24,6 +24,12 @@ const PRECACHE_EXTENSIONS = new Set([
   '.webmanifest',
   '.svg',
   '.png',
+  // Raster images baked into the build (e.g. the default dashboard banner)
+  // must be precached too, or they would be missing offline on a fresh
+  // terminal that has never opened the Dashboard while online.
+  '.jpg',
+  '.jpeg',
+  '.webp',
   '.ico',
   '.woff',
   '.woff2',

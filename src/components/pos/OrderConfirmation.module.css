@@ -112,6 +112,22 @@
   color: var(--color-text);
 }
 
+.receiptError {
+  width: 100%;
+  margin: 0 0 var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-md);
+  background-color: var(--color-danger-soft);
+  color: var(--color-danger);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  text-align: center;
+}
+
+.retryButton {
+  margin-bottom: var(--sp-2);
+}
+
 @keyframes rise {
   from {
     opacity: 0;

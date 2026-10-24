@@ -9,9 +9,11 @@
  * shipped the bootstrap password in plain text inside `dist/assets/index-*.js`.
  *
  * The fix is not to obfuscate it but to stop shipping one. On first run the
- * application now generates a random single-use setup password, shows it once
- * to whoever is installing the terminal, and requires it to be changed before
- * the till can be used. Nothing secret is embedded in the build.
+ * application opens an account-creation (Sign-Up) screen where the operator
+ * chooses their own username and password. No account exists — and nothing
+ * secret is embedded in the build — until they submit that form. Once the
+ * account exists, the Sign-Up screen is closed and every later visit goes
+ * through Sign-In.
  *
  * `VITE_ADMIN_PASSWORD` is still honoured for automated testing and for
  * controlled kiosk provisioning, but it is explicitly documented as insecure
@@ -31,36 +33,6 @@ const DEFAULT_USERNAME = 'admin';
  */
 const PROVISIONED_PASSWORD = (env.VITE_ADMIN_PASSWORD ?? '').trim();
 
-/**
- * Generate a readable single-use setup password.
- *
- * Uses the CSPRNG, avoids ambiguous characters (0/O, 1/l/I) so it can be read
- * off a screen and typed without error, and is never persisted in plaintext -
- * only its PBKDF2 hash is stored.
- */
-export function generateSetupPassword(): string {
-  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const groups = 3;
-  const perGroup = 4;
-
-  const bytes = new Uint8Array(groups * perGroup);
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-    crypto.getRandomValues(bytes);
-  } else {
-    // Only reachable in a non-browser context; still avoids a fixed value.
-    for (let i = 0; i < bytes.length; i += 1) {
-      bytes[i] = Math.floor(Math.random() * 256);
-    }
-  }
-
-  const chars = Array.from(bytes, (b) => alphabet[b % alphabet.length]);
-  const out: string[] = [];
-  for (let g = 0; g < groups; g += 1) {
-    out.push(chars.slice(g * perGroup, (g + 1) * perGroup).join(''));
-  }
-  return out.join('-');
-}
-
 export const AUTH_CONFIG = {
   /** Seed username for first run. */
   bootstrapUsername: (env.VITE_ADMIN_USERNAME ?? DEFAULT_USERNAME).trim(),
@@ -77,11 +49,22 @@ export const AUTH_CONFIG = {
   /** How long a signed-in session stays valid. */
   sessionDurationMs: 12 * 60 * 60 * 1000, // 12 hours
 
-  /** Brute-force protection. */
-  maxFailedAttempts: 5,
-  lockoutDurationMs: 60 * 1000, // 1 minute
+  /*
+   * Failed sign-ins are NOT subject to a timed cooldown or account lockout
+   * (product policy): a wrong password returns an error and the operator may
+   * retry immediately. An earlier version locked the form for 60 seconds
+   * after 5 failures; that timer lived in localStorage, so anyone with
+   * physical access to the terminal could clear it anyway — it inconvenienced
+   * legitimate operators without stopping a real attacker. What actually
+   * slows password guessing here is the PBKDF2 work factor below, which is
+   * paid on every attempt and cannot be cleared from storage. Password
+   * verification itself is unchanged: wrong credentials never authenticate.
+   */
 
-  /** Minimum length enforced when changing the password. */
+  /** Minimum length enforced for a username. */
+  minUsernameLength: 3,
+
+  /** Minimum length enforced when setting or changing the password. */
   minPasswordLength: 6,
 
   /** PBKDF2 parameters. */

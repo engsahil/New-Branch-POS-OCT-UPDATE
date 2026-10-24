@@ -20,22 +20,32 @@ export function OrderConfirmation({
   const { order, items } = completed;
   const [receipt, setReceipt] = useState<ReceiptModel | null>(null);
   const [kitchen, setKitchen] = useState<KitchenReceiptModel | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
+    setFailed(false);
     void Promise.all([
       receiptService.build(order, items),
       receiptService.buildKitchen(order, items),
-    ]).then(([cust, kit]) => {
-      if (active) {
-        setReceipt(cust);
-        setKitchen(kit);
-      }
-    });
+    ])
+      .then(([cust, kit]) => {
+        if (active) {
+          setReceipt(cust);
+          setKitchen(kit);
+        }
+      })
+      .catch(() => {
+        // The order itself is already saved. A receipt that cannot be
+        // built must surface as a visible, retryable error — never as a
+        // confirmation screen whose print actions silently never arrive.
+        if (active) setFailed(true);
+      });
     return () => {
       active = false;
     };
-  }, [order, items]);
+  }, [order, items, attempt]);
 
   if (receipt && kitchen) {
     return (
@@ -108,6 +118,23 @@ export function OrderConfirmation({
             </>
           ) : null}
         </dl>
+
+        {failed ? (
+          <>
+            <p className={styles.receiptError} role="alert">
+              Order saved, but the receipt could not be prepared. Retry, or
+              print it any time from Sales → Orders.
+            </p>
+            <Button
+              variant="secondary"
+              fullWidth
+              className={styles.retryButton}
+              onClick={() => setAttempt((value) => value + 1)}
+            >
+              Retry receipt
+            </Button>
+          </>
+        ) : null}
 
         <Button onClick={onNewOrder} fullWidth>
           New order

@@ -37,6 +37,10 @@ import { formatMoney } from '@/utils/currency';
 import { formatDate, formatTime } from '@/utils/date';
 import { formatPaymentMethod } from '@/utils/payment';
 import { receiptOrderTypeLabel } from '@/utils/receipt';
+// Bundled with the app (1600×500, ~110 KB) and precached by the service
+// worker, so the default banner is available immediately and offline with
+// no external image request. A custom banner from Settings replaces it.
+import defaultBannerUrl from '@/assets/default-restaurant-banner.jpg';
 import styles from './DashboardPage.module.css';
 
 /** Windows offered above the trend chart. One report query per change. */
@@ -247,7 +251,10 @@ export default function DashboardPage() {
     },
   ];
 
-  const restaurantName = profile?.name?.trim() || 'Restaurant profile not configured';
+  // Banner content stays minimal: the restaurant name and a short greeting
+  // (plus the configured tagline, if one exists). No statistics or actions.
+  const restaurantName = profile?.name?.trim() || 'Welcome back';
+  const customBanner = profile?.banner?.dataUrl ? profile.banner : null;
 
   return (
     <div className="page">
@@ -304,42 +311,35 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      {/* Hero banner: real profile data, operator-supplied image. */}
+      {/*
+        Hero banner. Shows the operator's custom image when one is saved in
+        Settings, otherwise the built-in restaurant banner bundled with the
+        app. Deliberately no editing controls here — banner customisation
+        lives in Settings (Appearance / Restaurant profile) so the banner
+        itself stays clean.
+      */}
       <section className={styles.hero} aria-label="Restaurant banner">
-        {profile?.banner?.dataUrl ? (
-          <img
-            src={profile.banner.dataUrl}
-            alt=""
-            className={styles.heroImage}
-            width={profile.banner.width}
-            height={profile.banner.height}
-            loading="eager"
-            decoding="async"
-          />
-        ) : (
-          <span className={styles.heroImageFallback} aria-hidden="true" />
-        )}
+        <img
+          src={customBanner ? customBanner.dataUrl : defaultBannerUrl}
+          alt=""
+          className={styles.heroImage}
+          width={customBanner ? customBanner.width : 1600}
+          height={customBanner ? customBanner.height : 500}
+          loading="eager"
+          decoding="async"
+        />
         <div className={styles.heroOverlay}>
           <div className={styles.heroText}>
             <h2 className={styles.heroTitle}>{restaurantName}</h2>
             <p className={styles.heroLine}>
-              {profile?.name
-                ? `Welcome back. ${stats.todayOrders} order${
-                    stats.todayOrders === 1 ? '' : 's'
-                  } completed today.`
-                : 'Add the restaurant name, logo and banner in Settings.'}
+              {profile?.name?.trim()
+                ? 'Welcome back.'
+                : 'Add your restaurant name in Settings.'}
             </p>
             {profile?.tagline ? (
               <p className={styles.heroTagline}>{profile.tagline}</p>
             ) : null}
           </div>
-          <button
-            type="button"
-            className={styles.heroAction}
-            onClick={() => navigate(ROUTE_PATHS.admin)}
-          >
-            {profile?.banner ? 'Change banner' : 'Add banner'}
-          </button>
         </div>
       </section>
 

@@ -26,22 +26,12 @@
   z-index: 0;
 }
 
-/* No image: a flat brand-green field, no invented artwork. */
-.heroImageFallback {
-  position: absolute;
-  inset: 0;
-  background-color: var(--color-primary);
-  z-index: 0;
-}
-
 .heroOverlay {
   position: relative;
   z-index: 1;
   width: 100%;
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--sp-4);
   padding: var(--sp-5);
   background: linear-gradient(
     to top,
@@ -78,27 +68,10 @@
   color: rgb(255 255 255 / 78%);
 }
 
-.heroAction {
-  flex-shrink: 0;
-  padding: 8px 14px;
-  border: 1px solid rgb(255 255 255 / 45%);
-  border-radius: var(--radius-md);
-  background-color: rgb(255 255 255 / 14%);
-  color: #ffffff;
-  font-size: var(--fs-xs);
-  font-weight: var(--fw-semibold);
-  cursor: pointer;
-  backdrop-filter: blur(2px);
-}
-
-.heroAction:hover {
-  background-color: rgb(255 255 255 / 24%);
-}
-
-.heroAction:focus-visible {
-  outline: 2px solid #ffffff;
-  outline-offset: 2px;
-}
+/*
+ * No .heroAction (or any other control) is rendered over the banner by
+ * design: the banner is presentation only, and editing happens in Settings.
+ */
 
 /* ---------------- KPI cards ---------------- */
 
@@ -575,11 +548,6 @@
 @media (max-width: 720px) {
   .hero {
     min-height: 150px;
-  }
-
-  .heroOverlay {
-    flex-direction: column;
-    align-items: flex-start;
   }
 
   .columns {

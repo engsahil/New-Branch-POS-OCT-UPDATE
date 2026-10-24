@@ -80,6 +80,7 @@ export default function SalesPage() {
   /* ---------------- Orders ---------------- */
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [orderFrom, setOrderFrom] = useState('');
   const [orderTo, setOrderTo] = useState('');
@@ -92,6 +93,11 @@ export default function SalesPage() {
     setHistoryLoading(true);
     try {
       setHistory(await orderService.history());
+      setHistoryError(null);
+    } catch {
+      // Keep whatever rows are already on screen; a storage failure must
+      // not be presented as an empty order history.
+      setHistoryError('Order history could not be loaded from this device.');
     } finally {
       setHistoryLoading(false);
     }
@@ -523,6 +529,12 @@ export default function SalesPage() {
               />
             </div>
           </div>
+
+          {historyError ? (
+            <p className={styles.error} role="alert">
+              {historyError}
+            </p>
+          ) : null}
 
           {historyLoading ? (
             <p className={styles.loading}>Loading orders…</p>

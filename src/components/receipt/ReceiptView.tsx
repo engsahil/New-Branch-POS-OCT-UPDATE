@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui';
 import { printReceipt, printReceipts } from '@/services/printService';
 import {
+  DEFAULT_RECEIPT_WIDTH,
   RECEIPT_WIDTHS,
   receiptService,
   type KitchenReceiptModel,
@@ -37,9 +38,21 @@ export function ReceiptView({
 
   useEffect(() => {
     let active = true;
-    void receiptService.getWidth().then((stored) => {
-      if (active) setWidth(stored);
-    });
+    void receiptService
+      .getWidth()
+      .then((stored) => {
+        if (active) setWidth(stored);
+      })
+      .catch(() => {
+        // Fall back to the default width so the receipt and its print
+        // actions still render; without this the view would sit on
+        // "Loading receipt…" forever after a settings read failure.
+        if (!active) return;
+        setWidth(DEFAULT_RECEIPT_WIDTH);
+        setPrintError(
+          `Could not load the saved paper width; using ${DEFAULT_RECEIPT_WIDTH}.`,
+        );
+      });
     return () => {
       active = false;
     };

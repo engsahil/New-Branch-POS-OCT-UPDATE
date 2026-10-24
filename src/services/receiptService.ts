@@ -190,11 +190,13 @@ export const receiptService = {
 
           dealContents = (
             await Promise.all(
-              deal.items.map(async (line) => {
+              // Records from older backups may predate the items array; a
+              // malformed deal must never make the whole receipt unbuildable.
+              (deal.items ?? []).map(async (line) => {
                 const menuItem = await menuItemsRepository.getById(
                   line.menuItemId,
                 );
-                if (!menuItem || menuItem.deletedAt || !menuItem.name.trim()) {
+                if (!menuItem || menuItem.deletedAt || !menuItem.name?.trim()) {
                   return null;
                 }
                 const size = line.sizeLabel ? ` (${line.sizeLabel})` : '';
