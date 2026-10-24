@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Button, Input } from '@/components/ui';
 import { EditIcon } from '@/components/ui/Icons';
 import { ReceiptView } from '@/components/receipt';
@@ -42,6 +43,7 @@ export function OrderReceiptDialog({
   const [items, setItems] = useState<OrderItemRecord[]>([]);
   const [audits, setAudits] = useState<ReceiptAuditRecord[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [editing, setEditing] = useState(false);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [reason, setReason] = useState('');
@@ -50,25 +52,35 @@ export function OrderReceiptDialog({
 
   const load = useCallback(async () => {
     setError(null);
-    const order = await orderService.getOrder(orderId);
-    if (!order) {
-      setError('Order not found.');
-      return;
-    }
-    const orderItems = await orderService.getOrderItems(orderId);
-    const [receipt, kitchenReceipt, history] = await Promise.all([
-      receiptService.build(order, orderItems),
-      receiptService.buildKitchen(order, orderItems),
-      receiptEditService.auditsFor(orderId),
-    ]);
+    setLoadFailed(false);
+    try {
+      const order = await orderService.getOrder(orderId);
+      if (!order) {
+        setError('Order not found.');
+        setLoadFailed(true);
+        return;
+      }
+      const orderItems = await orderService.getOrderItems(orderId);
+      const [receipt, kitchenReceipt, history] = await Promise.all([
+        receiptService.build(order, orderItems),
+        receiptService.buildKitchen(order, orderItems),
+        receiptEditService.auditsFor(orderId),
+      ]);
 
-    setModel(receipt);
-    setKitchen(kitchenReceipt);
-    setItems(orderItems);
-    setAudits(history);
-    setQuantities(
-      Object.fromEntries(orderItems.map((item) => [item.id, item.quantity])),
-    );
+      setModel(receipt);
+      setKitchen(kitchenReceipt);
+      setItems(orderItems);
+      setAudits(history);
+      setQuantities(
+        Object.fromEntries(orderItems.map((item) => [item.id, item.quantity])),
+      );
+    } catch {
+      // Keep any already-loaded receipt on screen; when nothing loaded,
+      // the dialog must say so and offer a retry instead of sitting on
+      // "Loading receipt…" with the print actions silently absent.
+      setError('The receipt could not be loaded. The order is saved; please try again.');
+      setLoadFailed(true);
+    }
   }, [orderId]);
 
   useEffect(() => {
@@ -114,7 +126,12 @@ export function OrderReceiptDialog({
     }
   }
 
-  return (
+  // Portal to <body>: pages animate a transform on entry (.page), which
+  // makes them a containing block + stacking context. Rendered in place,
+  // this fixed overlay was positioned against the page (not the viewport)
+  // and its z-index could never outrank shell-level fixed elements such
+  // as the guided tour — which then covered the print actions.
+  return createPortal(
     <div className={styles.overlay} role="presentation" onMouseDown={onClose}>
       <section
         className={styles.panel}
@@ -131,7 +148,9 @@ export function OrderReceiptDialog({
             <p className={styles.meta}>
               {model
                 ? `${model.orderType} · ${model.date} ${model.time}`
-                : 'Loading receipt…'}
+                : loadFailed
+                  ? 'Receipt unavailable'
+                  : 'Loading receipt…'}
             </p>
           </div>
           <div className={styles.headActions}>
@@ -241,6 +260,10 @@ export function OrderReceiptDialog({
                 </Button>
               }
             />
+          ) : loadFailed ? (
+            <Button variant="secondary" size="sm" onClick={() => void load()}>
+              Retry
+            </Button>
           ) : (
             <p className={styles.loading}>Loading receipt…</p>
           )}
@@ -270,6 +293,7 @@ export function OrderReceiptDialog({
           )}
         </section>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }

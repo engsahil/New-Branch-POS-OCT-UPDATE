@@ -292,6 +292,18 @@
 }
 
 /*
+ * Stacked (mobile) POS: the panel is content-height and the page scrolls,
+ * so the line list bounds itself and scrolls internally instead of
+ * growing the page by every line. Matches the PosPage stacking breakpoint.
+ */
+@media (max-width: 819px) {
+  .lines {
+    flex: none;
+    max-height: 38vh;
+  }
+}
+
+/*
  * Touch devices need a 44px minimum target. The visual control stays compact
  * so the cart is not dominated by chrome; the hit area is expanded with a
  * pseudo-element instead, which costs no layout space.

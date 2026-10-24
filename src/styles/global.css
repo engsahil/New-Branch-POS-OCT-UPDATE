@@ -120,6 +120,18 @@ label {
   .page {
     padding: var(--sp-6) var(--sp-4);
     gap: var(--sp-5);
+    /*
+     * Never shrink below content height on small screens. With the base
+     * flex: 1 (shrink 1, basis 0), .page is exactly the scrollport height
+     * and tall content merely spills past its box: the scrollable bottom
+     * is then the spilled content's edge, so the tab-bar clearance that
+     * .main adds as padding-bottom can never be scrolled into — the last
+     * controls (e.g. Complete order, the final rows' Receipt buttons)
+     * stayed trapped under the fixed tab bar. Basis auto + shrink 0 ends
+     * the page box at the true content end, letting that clearance work,
+     * while grow 1 still fills the viewport for short pages.
+     */
+    flex: 1 0 auto;
   }
 }
 

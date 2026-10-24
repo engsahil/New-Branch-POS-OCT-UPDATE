@@ -112,6 +112,8 @@ reproduced verbatim from the run, not predicted.
 | Production build | `npm run build` | typecheck + build succeed, 61 precached files |
 | UI smoke (development only) | `node scripts/smoke-ui.mjs` | mounts, signs in, renders 10 routes, settings/appearance save, no duplicate dashboard, bell present, wizard skipped, no console errors |
 | First-run smoke (development only) | `node scripts/smoke-setup.mjs` | fresh terminal opens Sign-Up, registration returns to Sign-In, 6 wrong passwords retryable with no cooldown, built-in banner with no overlay, Settings banner card, sign-out/returning-user guards |
+| POS smoke (development only) | `node scripts/smoke-pos.mjs` | places real orders through the POS (steppers, discount cap, shortfall/change), print actions after every order, selected-order print document, single-flight printing, exact-once stock, Receipt on every order-list row incl. page 2 |
+| POS browser smoke (development only) | `node scripts/smoke-pos-browser.mjs` | real Chromium layout/hit-testing: tour never covers print actions, receipt failures show Retry, legacy-deal receipts build, mobile cart steppers usable, last controls clear the tab bar, double-click places one order |
 
 `npm test` is dependency-free and offline. The UI smoke run needs two
 development-only packages that are **not** in `package.json`:
@@ -127,6 +129,19 @@ npm run build                                          # rebuild without the tes
 output above (never the throwaway provisioned build): it starts from an empty
 database, completes the first-run Sign-Up through the real form, and checks
 the no-cooldown, banner and returning-user behaviour listed in the table.
+
+`node scripts/smoke-pos.mjs` runs against the same throwaway provisioned
+build as the UI smoke and needs the same two development-only packages. The
+browser smoke additionally needs a real Chromium; it uses the
+`@sparticuz/chromium` npm tarball (no browser download) and spawns its own
+preview server:
+
+```bash
+npm install --no-save puppeteer-core @sparticuz/chromium
+VITE_ADMIN_PASSWORD=smoke-test-password VITE_EXPOSE_TEST_API=true npm run build
+node scripts/smoke-pos-browser.mjs
+npm run build                                          # rebuild normally
+```
 
 The smoke run loads the built bundle in Happy DOM against a fake IndexedDB,
 signs in through the real form, then visits `/dashboard`, `/sales`,
