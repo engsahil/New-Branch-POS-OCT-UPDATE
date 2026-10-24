@@ -142,6 +142,39 @@ function check(condition, label) {
   console.log(`PASS  ${label}`);
 }
 
+/**
+ * Read or patch the saved restaurant profile straight from the same
+ * IndexedDB the application uses. This seeds the *stored* state, so the
+ * assertions below prove the UI reads and writes real persistence rather
+ * than component state.
+ */
+function withProfileStore(mode, mutate) {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('pos-db');
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const database = request.result;
+      const tx = database.transaction('restaurant', mode);
+      const store = tx.objectStore('restaurant');
+      const get = store.get('restaurant-profile');
+      get.onerror = () => reject(get.error);
+      get.onsuccess = () => {
+        try {
+          resolve(mutate(store, get.result));
+        } catch (err) {
+          reject(err);
+        }
+      };
+      tx.oncomplete = () => database.close();
+      tx.onerror = () => reject(tx.error);
+    };
+  });
+}
+
+function readStoredBanner() {
+  return withProfileStore('readonly', (_store, profile) => profile?.banner ?? null);
+}
+
 const files = await readdir(assets);
 const entry = files.find((name) => /^index-.*\.js$/.test(name));
 if (!entry) throw new Error('No built entry bundle found. Run npm run build first.');
@@ -313,6 +346,16 @@ submitForm();
 await waitFor(() => document.querySelector('#main-content'), 'application shell');
 check(true, 'the correct password signs in right after the failures');
 
+// A plain visit (the app was opened at the root) must land on the Dashboard,
+// which is the documented flow: Setup -> Sign-In -> Dashboard.
+await waitFor(
+  () =>
+    window.location.pathname.endsWith('/dashboard') &&
+    Boolean(document.querySelector('section[aria-label="Restaurant banner"]')),
+  'Dashboard after a plain sign-in',
+);
+check(true, 'a successful sign-in opens the Dashboard');
+
 history.pushState({}, '', '/dashboard');
 window.dispatchEvent(new window.PopStateEvent('popstate'));
 await waitFor(
@@ -360,6 +403,98 @@ const saveBanner = Array.from(document.querySelectorAll('button')).find(
 );
 check(Boolean(saveBanner), 'Appearance provides an explicit Save banner action');
 
+/* -------- A saved custom banner: persists, previews, restores default --- */
+
+const CUSTOM_BANNER =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==';
+
+// Seed a saved custom banner exactly as a previous Settings save would.
+await withProfileStore('readwrite', (store, profile) => {
+  store.put({
+    ...profile,
+    banner: {
+      dataUrl: CUSTOM_BANNER,
+      type: 'image/png',
+      width: 1200,
+      height: 375,
+      bytes: 70,
+      fileName: 'operator-banner.png',
+    },
+  });
+});
+check(
+  (await readStoredBanner())?.dataUrl === CUSTOM_BANNER,
+  'a custom banner can be stored in the restaurant profile',
+);
+
+// A fresh visit to the Dashboard (not a state carry-over) must show it.
+history.pushState({}, '', '/sales');
+window.dispatchEvent(new window.PopStateEvent('popstate'));
+await waitFor(() => document.body.textContent.includes('Sales'), 'Sales route');
+history.pushState({}, '', '/dashboard');
+window.dispatchEvent(new window.PopStateEvent('popstate'));
+await waitFor(
+  () =>
+    document
+      .querySelector('section[aria-label="Restaurant banner"] img')
+      ?.getAttribute('src') === CUSTOM_BANNER,
+  'saved custom banner on the Dashboard',
+);
+check(true, 'a saved custom banner is shown after revisiting the Dashboard');
+
+// Settings previews the same stored banner and can restore the default.
+history.pushState({}, '', '/admin');
+window.dispatchEvent(new window.PopStateEvent('popstate'));
+const appearanceTabAgain = await waitFor(
+  () => document.getElementById('admin-tab-appearance'),
+  'Appearance tab again',
+);
+appearanceTabAgain.click();
+await waitFor(
+  () =>
+    document.body.textContent.includes('your custom banner (operator-banner.png)'),
+  'Appearance previewing the saved custom banner',
+);
+check(true, 'Appearance previews the saved custom banner');
+
+const restoreDefault = Array.from(document.querySelectorAll('button')).find(
+  (button) => button.textContent.trim() === 'Restore default',
+);
+check(Boolean(restoreDefault), 'Appearance offers Restore default');
+restoreDefault.click();
+
+const saveRestored = await waitFor(
+  () =>
+    Array.from(document.querySelectorAll('button')).find(
+      (button) =>
+        button.textContent.trim() === 'Save banner' && !button.disabled,
+    ),
+  'Save banner enabled after restoring the default',
+);
+saveRestored.click();
+await waitFor(async () => (await readStoredBanner()) === null, 'default restored');
+check(true, 'Restore default clears the custom banner in storage');
+await waitFor(
+  () =>
+    document.body.textContent.includes('Currently active: the built-in restaurant banner'),
+  'Appearance reporting the built-in banner as active',
+);
+check(true, 'Appearance reports the built-in banner as active again');
+
+history.pushState({}, '', '/dashboard');
+window.dispatchEvent(new window.PopStateEvent('popstate'));
+await waitFor(
+  () =>
+    Boolean(
+      document
+        .querySelector('section[aria-label="Restaurant banner"] img')
+        ?.getAttribute('src')
+        ?.includes('default-restaurant-banner'),
+    ),
+  'built-in banner back on the Dashboard',
+);
+check(true, 'the Dashboard shows the built-in banner again');
+
 /* ------------- Sign out, then returning-user behaviour ----------------- */
 
 history.pushState({}, '', '/dashboard');
@@ -395,6 +530,33 @@ await waitFor(
   'protected route guard',
 );
 check(true, 'opening /dashboard while signed out redirects to Sign-In');
+
+// A deep link is preserved: signing in from that redirect returns the
+// operator to the page they asked for, not the Dashboard.
+typeInto(document.querySelector('input[name="username"]'), USERNAME);
+typeInto(document.querySelector('input[name="password"]'), PASSWORD);
+submitForm();
+await waitFor(
+  () =>
+    window.location.pathname.endsWith('/dashboard') &&
+    Boolean(document.querySelector('section[aria-label="Restaurant banner"]')),
+  'deep-linked sign-in',
+);
+check(true, 'signing in from a protected URL returns to that URL');
+
+// Sign out again so the remaining checks run signed out.
+const secondSignOut = await waitFor(
+  () =>
+    Array.from(document.querySelectorAll('button')).find((button) =>
+      button.textContent.trim().includes('Sign out'),
+    ),
+  'Sign out control (second sign-in)',
+);
+secondSignOut.click();
+await waitFor(
+  () => document.body.textContent.includes('Administrator access is required'),
+  'Sign-In screen after the deep-link sign-out',
+);
 
 // And /setup itself is closed once an account exists.
 history.pushState({}, '', '/setup');

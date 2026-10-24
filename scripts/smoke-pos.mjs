@@ -237,6 +237,14 @@ console.log('PASS  sign-in succeeds (existing provisioned account, POS audit bui
 
 /* ------------------------- Order 1 through the POS ---------------------- */
 
+// Signing in now opens the Dashboard (v5.1.9 flow), so walk to the till.
+await waitFor(
+  () => window.location.pathname.endsWith('/dashboard'),
+  'Dashboard after sign-in',
+);
+await goTo('/', 'Current order');
+console.log('PASS  sign-in lands on the Dashboard and the POS is one step away');
+
 await waitFor(() => byAria('Add Test Burger, Large, Rs. 500'), 'burger tile');
 byAria('Add Test Burger, Large, Rs. 500').click();
 byAria('Add Test Burger, Large, Rs. 500').click();

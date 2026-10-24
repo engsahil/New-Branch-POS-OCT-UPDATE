@@ -26,6 +26,10 @@ flag.
 - **Registration does not sign in.** It redirects to Sign-In with
   “Account created successfully. Please sign in.” and the username
   prefilled. No session is created by Sign-Up.
+- **Signing in lands on the Dashboard.** A plain visit (the operator simply
+  opened the app) opens `/dashboard`, not the till; a visitor who was
+  redirected to Sign-In from a protected URL is returned to exactly that URL
+  instead.
 - **Returning visits:** signed-out users get Sign-In; `/setup` redirects to
   `/login` once an account exists — this is a single-administrator product,
   so there is no open public registration after setup.
@@ -82,7 +86,9 @@ is verified against the stored PBKDF2 hash on its own merits:
 - Banner content is minimal: **restaurant name + “Welcome back.”** plus the
   configured tagline only if one exists. The “N orders completed today”
   statistic was removed from the banner (it remains on the KPI cards, as
-  before).
+  before). A terminal with no saved name yet shows only the greeting —
+  no setup instructions, statistics or buttons — with the existing setup
+  reminder card sitting above the banner carrying any prompting.
 - **Customisation is in Settings:** a new “Dashboard banner” card in
   **Settings → Appearance** shows a wide preview of the active banner,
   upload/replace, **Restore default**, and an explicit **Save banner**
@@ -98,7 +104,8 @@ is verified against the stored PBKDF2 hash on its own merits:
 | --- | --- |
 | `npm run typecheck` | exit 0, no diagnostics |
 | `npm test` (IndexedDB, data port, receipts, v5.1.9, **auth fresh**, **auth legacy**) | all pass |
-| `node scripts/smoke-setup.mjs` (new, Happy DOM, normal build) | 31 checks pass: fresh → Sign-Up, validation, redirect to Sign-In (no session), 6 wrong passwords with immediate retry and no cooldown text, correct password works, built-in banner + no overlay, Settings → Appearance banner card, sign-out → Sign-In, protected-route and closed-`/setup` guards, later sign-ins |
+| `node scripts/smoke-setup.mjs` (new, Happy DOM, normal build) | 39 checks pass: fresh → Sign-Up, validation, redirect to Sign-In (no session), 6 wrong passwords with immediate retry and no cooldown text, correct password opens the Dashboard, built-in banner + no overlay, custom banner preview/restore at the DOM level, Settings → Appearance banner card, sign-out → Sign-In, deep-link return, protected-route and closed-`/setup` guards, later sign-ins |
+| `node scripts/verify-auth-banner-browser.mjs` (new, real Chromium, normal build) | 30 checks pass: fresh → Sign-Up at `/setup`, mobile Setup layout, validation, registration → Sign-In with no session, wrong password rejected, correct password → Dashboard, banner paints real pixels with `object-fit: cover`, zero controls/edit copy in the banner, exact name + greeting only, mobile banner layout/hit area, Settings → Appearance card with upload + Save, **banner still renders with the network switched off**, sign-out → Sign-In with the session cleared, protected URL still guarded, no console errors |
 | `node scripts/smoke-ui.mjs` (existing, provisioned throwaway build, rebuilt normal afterwards) | all 18 checks pass: sign-in, 10 routes, appearance persistence, no duplicate dashboard, wizard skipped for existing installs |
 | `npm run build` (normal) | succeeds; service worker precaches 61 files incl. the banner; bundle contains no test password |
 

@@ -111,7 +111,8 @@ reproduced verbatim from the run, not predicted.
 | Unit/service tests | `npm test` | 4 suites pass (IndexedDB, data port, receipts, v5.1.9) + auth fresh/legacy suites |
 | Production build | `npm run build` | typecheck + build succeed, 61 precached files |
 | UI smoke (development only) | `node scripts/smoke-ui.mjs` | mounts, signs in, renders 10 routes, settings/appearance save, no duplicate dashboard, bell present, wizard skipped, no console errors |
-| First-run smoke (development only) | `node scripts/smoke-setup.mjs` | fresh terminal opens Sign-Up, registration returns to Sign-In, 6 wrong passwords retryable with no cooldown, built-in banner with no overlay, Settings banner card, sign-out/returning-user guards |
+| First-run smoke (development only) | `node scripts/smoke-setup.mjs` | fresh terminal opens Sign-Up, registration returns to Sign-In, 6 wrong passwords retryable with no cooldown, sign-in opens the Dashboard, built-in banner with no overlay, custom banner preview/restore, Settings banner card, sign-out/returning-user guards |
+| Auth + banner browser smoke (development only) | `node scripts/verify-auth-banner-browser.mjs` | real Chromium: Setup at `/setup` on desktop and mobile, registration → Sign-In (no session), wrong password rejected, correct password → Dashboard, banner paints real pixels with no controls, exact name + greeting, Settings upload/Save card, banner renders offline, sign-out and protected-route guards |
 | POS smoke (development only) | `node scripts/smoke-pos.mjs` | places real orders through the POS (steppers, discount cap, shortfall/change), print actions after every order, selected-order print document, single-flight printing, exact-once stock, Receipt on every order-list row incl. page 2 |
 | POS browser smoke (development only) | `node scripts/smoke-pos-browser.mjs` | real Chromium layout/hit-testing: tour never covers print actions, receipt failures show Retry, legacy-deal receipts build, mobile cart steppers usable, last controls clear the tab bar, double-click places one order |
 
@@ -151,10 +152,21 @@ persist, that Settings has no second dashboard, and that nothing logs a console
 error. It is not a substitute for a browser: layout, CSS painting and printing
 still require a real device.
 
-**Not verified:** no physical thermal printer, no browser, and no touch device
-were available in this environment. Printing is verified at the calculation and
+The auth/banner browser smoke runs against a **normal** build (no provisioned
+password, so the first screen really is Sign-Up) and needs the same packages:
+
+```bash
+npm install --no-save puppeteer-core @sparticuz/chromium
+npm run build                                 # a normal build: no password, no test API
+node scripts/verify-auth-banner-browser.mjs   # screenshots to /tmp/pos-v519-ui
+```
+
+**Not verified:** no physical thermal printer and no touch device were
+available in this environment. Printing is verified at the calculation and
 encoder level only (see Printing); no claim is made that a specific printer
-produced a correct page.
+produced a correct page. Layout and painting of the auth screens and the
+dashboard banner *were* checked in real Chromium (desktop 1440×900 and mobile
+390×844).
 
 ## Stack
 
@@ -1170,7 +1182,8 @@ single administrator account (`authService.createInitialAdmin()`: validated,
 PBKDF2-hashed, written atomically with `add` so simultaneous submissions
 cannot both win, then re-read to verify). Success redirects to `/login` with
 "Account created successfully. Please sign in." — registration creates no
-session. Afterwards `/setup` redirects to `/login`, so there is no open
+session. Signing in then opens the **Dashboard**; a visitor redirected here
+from a protected URL is returned to that URL instead. Afterwards `/setup` redirects to `/login`, so there is no open
 public registration. Existing accounts (including older ones still flagged
 `mustChangePassword`) are recognised as set up and are never sent to Sign-Up
 or replaced by it.

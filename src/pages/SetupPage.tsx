@@ -73,7 +73,7 @@ export default function SetupPage() {
 
   // Already signed in — there is nothing to set up.
   if (isAuthenticated) {
-    return <Navigate to={state?.from ?? '/'} replace />;
+    return <Navigate to={state?.from ?? '/dashboard'} replace />;
   }
 
   // Navigation to Sign-In is already in progress after a successful

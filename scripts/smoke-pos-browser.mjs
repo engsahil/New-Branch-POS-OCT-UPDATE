@@ -158,7 +158,8 @@ await page.evaluate(async () => {
     });
   });
 });
-await page.reload({ waitUntil: 'networkidle2' });
+// Signing in opens the Dashboard (v5.1.9 flow); the POS lives at '/'.
+await page.goto(`${BASE}/`, { waitUntil: 'networkidle2' });
 await page.waitForSelector('#main-content');
 await page.waitForFunction(() => window.__pos?.receiptService, { timeout: 15000 });
 await text('Test Item 1');
