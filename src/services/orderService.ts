@@ -775,10 +775,9 @@ export const orderService = {
     ]);
     const saleByOrder = new Map(sales.map((sale) => [sale.orderId, sale]));
     return orders
+      // Newest creation time first; stable ID breaks timestamp ties.
       .sort((a, b) =>
-        (b.completedAt ?? b.createdAt).localeCompare(
-          a.completedAt ?? a.createdAt,
-        ),
+        b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id),
       )
       .map((order) => ({ order, sale: saleByOrder.get(order.id) }));
   },

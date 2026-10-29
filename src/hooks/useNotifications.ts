@@ -6,7 +6,7 @@
  * polling — the list is read when it changes and when it is first mounted.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   notificationService,
   subscribeNotifications,
@@ -25,12 +25,21 @@ export interface UseNotificationsResult {
 export function useNotifications(limit = 40): UseNotificationsResult {
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const request = useRef(0);
 
   const load = useCallback(async () => {
+    const sequence = ++request.current;
     try {
-      setNotifications(await notificationService.list(limit));
+      const [items, count] = await Promise.all([
+        notificationService.list(limit), notificationService.unreadCount(),
+      ]);
+      if (sequence === request.current) {
+        setNotifications(items);
+        setUnreadCount(count);
+      }
     } finally {
-      setLoading(false);
+      if (sequence === request.current) setLoading(false);
     }
   }, [limit]);
 
@@ -43,6 +52,7 @@ export function useNotifications(limit = 40): UseNotificationsResult {
     const unsubscribe = subscribeNotifications(run);
     return () => {
       active = false;
+      request.current += 1;
       unsubscribe();
     };
   }, [load]);
@@ -57,7 +67,7 @@ export function useNotifications(limit = 40): UseNotificationsResult {
 
   return {
     notifications,
-    unreadCount: notifications.filter((entry) => !entry.readAt).length,
+    unreadCount,
     loading,
     reload: load,
     markRead,

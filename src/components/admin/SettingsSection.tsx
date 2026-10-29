@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/app/AuthContext';
 import { Button, Input } from '@/components/ui';
 import { APP_CONFIG, CURRENCY } from '@/config/app.config';
 import { VENDOR } from '@/content/legal';
 import {
-  NOTIFICATION_KINDS,
   notificationService,
   type NotificationPreferences,
 } from '@/services/notificationService';
@@ -38,6 +37,8 @@ export function SettingsSection({ onOpenAbout }: SettingsSectionProps = {}) {
     null,
   );
   const [notificationSaved, setNotificationSaved] = useState(false);
+  const [notificationError, setNotificationError] = useState('');
+  const notificationQueue = useRef<Promise<void>>(Promise.resolve());
   const [tourStarted, setTourStarted] = useState(false);
   const [prefix, setPrefix] = useState('');
   const [autoShow, setAutoShow] = useState(true);
@@ -85,23 +86,24 @@ export function SettingsSection({ onOpenAbout }: SettingsSectionProps = {}) {
     }
   }
 
-  async function saveNotifications(): Promise<void> {
-    if (!notifications) return;
-    await notificationService.savePreferences(notifications);
-    setNotificationSaved(true);
-    window.setTimeout(() => setNotificationSaved(false), 2500);
+  function changeNotifications(next: NotificationPreferences): void {
+    setNotifications(next);
+    setNotificationSaved(false);
+    setNotificationError('');
+    // Serialize writes so rapid toggles cannot persist out of order.
+    notificationQueue.current = notificationQueue.current.catch(() => {}).then(async () => {
+      await notificationService.savePreferences(next);
+      setNotificationSaved(true);
+    }).catch(() => {
+      setNotificationError('Could not save notification preferences. Try again.');
+    });
   }
 
-  function toggleKind(kind: string): void {
-    setNotifications((current) => {
-      if (!current) return current;
-      return {
-        ...current,
-        kinds: {
-          ...current.kinds,
-          [kind]: !current.kinds[kind as keyof typeof current.kinds],
-        },
-      };
+  function toggleKind(kind: keyof NotificationPreferences['kinds']): void {
+    if (!notifications) return;
+    changeNotifications({
+      ...notifications,
+      kinds: { ...notifications.kinds, [kind]: !notifications.kinds[kind] },
     });
   }
 
@@ -177,7 +179,7 @@ export function SettingsSection({ onOpenAbout }: SettingsSectionProps = {}) {
           </span>
         </div>
         <p className={styles.hint}>
-          Choose which events appear in the notification centre.
+          Choose which new events appear in the notification centre. Changes save automatically; existing entries are not marked read or removed.
         </p>
 
         <label className={styles.toggleRow}>
@@ -187,9 +189,7 @@ export function SettingsSection({ onOpenAbout }: SettingsSectionProps = {}) {
             className={styles.checkbox}
             checked={notifications?.enabled ?? true}
             onChange={(event) =>
-              setNotifications((current) =>
-                current ? { ...current, enabled: event.target.checked } : current,
-              )
+              notifications && changeNotifications({ ...notifications, enabled: event.target.checked })
             }
           />
           <span>
@@ -200,7 +200,7 @@ export function SettingsSection({ onOpenAbout }: SettingsSectionProps = {}) {
           </span>
         </label>
 
-        {NOTIFICATION_KINDS.map((kind) => (
+        {(['order', 'stock', 'audit'] as const).map((kind) => (
           <label key={kind} className={styles.toggleRow}>
             <input
               type="checkbox"
@@ -218,11 +218,7 @@ export function SettingsSection({ onOpenAbout }: SettingsSectionProps = {}) {
           </label>
         ))}
 
-        <div className={styles.actions}>
-          <Button onClick={() => void saveNotifications()}>
-            Save notifications
-          </Button>
-        </div>
+        {notificationError ? <p role="alert">{notificationError}</p> : null}
       </section>
 
       <section className={styles.card}>

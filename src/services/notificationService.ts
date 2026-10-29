@@ -12,6 +12,9 @@
  */
 
 import { notificationsRepository } from '@/data/repositories';
+import { buildEntity } from '@/data/repositories/createRepository';
+import { db } from '@/data/db/indexedDb';
+import { STORES } from '@/config/storage.config';
 import type {
   NotificationKind,
   NotificationRecord,
@@ -128,19 +131,26 @@ export const notificationService = {
       const key = input.key.trim();
       if (!key) return null;
 
-      const existing = await notificationsRepository.findByIndex('by_key', key);
-      if (existing.length > 0) return existing[0] ?? null;
-
-      const record = await notificationsRepository.create({
-        key,
-        kind: input.kind,
-        severity: input.severity ?? 'info',
-        title: input.title.slice(0, 120),
-        body: input.body?.slice(0, 300),
-        link: input.link ?? null,
-        readAt: null,
+      // Check and insert in a single write transaction: concurrent creators,
+      // including other tabs, cannot both insert the same live key.
+      const { record, created } = await db.transaction([STORES.notifications], 'readwrite', async (stores) => {
+        const store = stores[STORES.notifications]!;
+        const matches = await db.request(store.index('by_key').getAll(key)) as NotificationRecord[];
+        const existing = matches.find((entry) => !entry.deletedAt);
+        if (existing) return { record: existing, created: false };
+        const record = buildEntity<NotificationRecord>({
+          key,
+          kind: input.kind,
+          severity: input.severity ?? 'info',
+          title: input.title.slice(0, 120),
+          body: input.body?.slice(0, 300),
+          link: input.link ?? null,
+          readAt: null,
+        });
+        await db.request(store.put(record));
+        return { record, created: true };
       });
-      notifyNotificationsChanged();
+      if (created) notifyNotificationsChanged();
       return record;
     } catch {
       return null;

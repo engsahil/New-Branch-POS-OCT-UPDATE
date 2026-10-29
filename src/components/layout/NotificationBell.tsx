@@ -17,14 +17,32 @@ function severityClass(notification: NotificationRecord): string {
  * Header bell with unread badge and recent notifications.
  *
  * The unread count is derived from persisted records, so it is correct after
- * a refresh. Marking read only happens once the underlying record has been
- * written — clicking an item both marks it read and opens its module.
+ * a refresh. Visible entries are marked read when they enter the panel’s
+ * viewport; clicking an item also opens its linked module.
  */
 export function NotificationBell() {
   const navigate = useNavigate();
   const { notifications, unreadCount, markRead, markAllRead } = useNotifications(30);
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const pendingRead = useRef(new Set<string>());
+
+  // Only rows intersecting the scroll viewport have actually been viewed.
+  useEffect(() => {
+    const list = listRef.current;
+    if (!open || !list || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        const id = (entry.target as HTMLElement).dataset.unreadId;
+        if (!entry.isIntersecting || !id || pendingRead.current.has(id)) continue;
+        pendingRead.current.add(id);
+        void markRead(id).catch(() => {}).finally(() => pendingRead.current.delete(id));
+      }
+    }, { root: list, threshold: 0.5 });
+    list.querySelectorAll('[data-unread-id]').forEach((row) => observer.observe(row));
+    return () => observer.disconnect();
+  }, [open, notifications, markRead]);
 
   useEffect(() => {
     if (!open) return;
@@ -90,9 +108,9 @@ export function NotificationBell() {
           {notifications.length === 0 ? (
             <p className={styles.empty}>No notifications yet.</p>
           ) : (
-            <ul className={styles.list}>
+            <ul className={styles.list} ref={listRef}>
               {notifications.map((notification) => (
-                <li key={notification.id}>
+                <li key={notification.id} data-unread-id={notification.readAt ? undefined : notification.id}>
                   <button
                     type="button"
                     className={`${styles.item} ${notification.readAt ? '' : styles.unread}`}

@@ -59,9 +59,9 @@ export const TOUR_STEPS = [
     body: 'Record stock as it arrives; each receipt updates the inventory line and keeps its own history.',
   },
   {
-    target: 'notifications',
+    target: 'nav-dashboard',
     title: 'Notifications',
-    body: 'New orders, stock alerts and receipt corrections appear here. Unread counts persist across reloads.',
+    body: 'Open Dashboard for notifications about orders, stock and receipt corrections. Unread counts persist across reloads.',
   },
 ] as const;
 

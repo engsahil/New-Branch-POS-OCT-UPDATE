@@ -651,7 +651,7 @@ export default function SalesPage() {
                 variant="ghost"
                 size="sm"
                 disabled={currentPage <= 1}
-                onClick={() => setPage((value) => Math.max(1, value - 1))}
+                onClick={() => setPage(Math.max(1, currentPage - 1))}
               >
                 Previous
               </Button>
@@ -662,7 +662,7 @@ export default function SalesPage() {
                 variant="ghost"
                 size="sm"
                 disabled={currentPage >= pageCount}
-                onClick={() => setPage((value) => Math.min(pageCount, value + 1))}
+                onClick={() => setPage(Math.min(pageCount, currentPage + 1))}
               >
                 Next
               </Button>
