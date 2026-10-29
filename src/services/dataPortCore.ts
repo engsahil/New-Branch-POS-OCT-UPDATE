@@ -356,6 +356,18 @@ function parseAndValidate(
     stores[name] = validated;
   }
 
+  // Count metadata is optional for older v2 files, but when present it must
+  // match the data exactly so accidental truncation is detected before import.
+  if (hasOwn(input, 'storeCounts')) {
+    if (!isRecord(input.storeCounts)) throw new Error('Backup store counts are invalid.');
+    const counts = input.storeCounts;
+    if (Object.keys(counts).length !== Object.keys(input.stores).length ||
+        Object.entries(input.stores).some(([name, rows]) =>
+          !Array.isArray(rows) || counts[name] !== rows.length)) {
+      throw new Error('Backup store counts do not match its data. No data was changed.');
+    }
+  }
+
   return {
     exportedAt: input.exportedAt,
     sourceOrigin: input.source.origin,
@@ -539,6 +551,7 @@ export function createDataPortService(
           databaseVersion: config.databaseVersion,
         },
         excludedStores: { ...config.excludedStores },
+        storeCounts: Object.fromEntries(Object.entries(stores).map(([name, rows]) => [name, rows.length])),
         stores,
       };
     },

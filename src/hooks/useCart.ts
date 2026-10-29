@@ -17,6 +17,7 @@ import {
   type CartTotals,
 } from '@/services/orderService';
 import type { ID, Paisa } from '@/types/common';
+import { createId } from '@/utils/id';
 import type { SelectedAddOn, SelectedTopping } from '@/types/domain';
 
 export interface UseCartResult {
@@ -40,9 +41,21 @@ export interface UseCartResult {
   incrementLine: (key: string) => void;
   decrementLine: (key: string) => void;
   removeLine: (key: string) => void;
+  splitLine: (key: string) => void;
   updateLineToppings: (key: string, toppings: SelectedTopping[]) => void;
   updateLineAddOns: (key: string, addOns: SelectedAddOn[]) => void;
   clear: () => void;
+}
+
+/** Separate one unit while preserving all existing selections and pricing. */
+export function splitCartLine(lines: CartLine[], key: string, newKey: string): CartLine[] {
+  const index = lines.findIndex((line) => line.key === key);
+  const line = lines[index];
+  if (!line || line.quantity < 2 || lines.some((item) => item.key === newKey)) return lines;
+  const next = [...lines];
+  next.splice(index, 1, { ...line, quantity: line.quantity - 1 },
+    { ...line, key: newKey, quantity: 1 });
+  return next;
 }
 
 export function useCart(): UseCartResult {
@@ -69,7 +82,7 @@ export function useCart(): UseCartResult {
     const key = cartLineKey(input.menuItemId, input.sizeLabel);
 
     setLines((prev) => {
-      const existing = prev.find((line) => line.key === key);
+      const existing = prev.find((line) => line.key === key && line.toppings.length === 0 && line.addOns.length === 0);
 
       if (existing) {
         return prev.map((line) =>
@@ -86,7 +99,7 @@ export function useCart(): UseCartResult {
         ...prev,
         {
           ...input,
-          key,
+          key: prev.some((line) => line.key === key) ? `${key}::${createId()}` : key,
           kind: 'item' as const,
           dealId: null,
           quantity: 1,
@@ -101,7 +114,7 @@ export function useCart(): UseCartResult {
     const key = dealLineKey(input.dealId);
 
     setLines((prev) => {
-      const existing = prev.find((line) => line.key === key);
+      const existing = prev.find((line) => line.key === key && line.toppings.length === 0 && line.addOns.length === 0);
       if (existing) {
         return prev.map((line) =>
           line.key === key
@@ -116,7 +129,7 @@ export function useCart(): UseCartResult {
       return [
         ...prev,
         {
-          key,
+          key: prev.some((line) => line.key === key) ? `${key}::${createId()}` : key,
           kind: 'deal' as const,
           menuItemId: null,
           dealId: input.dealId,
@@ -178,6 +191,12 @@ export function useCart(): UseCartResult {
     [],
   );
 
+  // Split one unit into a separate line, retaining its current modifiers.
+  const splitLine = useCallback((key: string) => {
+    const newKey = `${key}::${createId()}`;
+    setLines((prev) => splitCartLine(prev, key, newKey));
+  }, []);
+
   const updateLineToppings = useCallback((key: string, toppings: SelectedTopping[]) => {
     setLines((prev) => prev.map((l) => (l.key === key ? { ...l, toppings } : l)));
   }, []);
@@ -205,6 +224,7 @@ export function useCart(): UseCartResult {
     incrementLine,
     decrementLine,
     removeLine,
+    splitLine,
     updateLineToppings,
     updateLineAddOns,
     clear,

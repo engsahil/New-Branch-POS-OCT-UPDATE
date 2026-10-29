@@ -615,3 +615,32 @@ assert.equal(
 console.log(
   'v5.1.9 checks passed: saved-customer reuse without duplicates, persistent deduped notifications with accurate unread counts, date-bounded sales reports excluding cancelled sales, audited receipt corrections with exact stock movement and refusal cases, and setup detection that preserves existing installations, plus display preferences that persist but never alter the underlying data, and stock receipts that update inventory atomically and reject impossible adjustments.',
 );
+
+// Quantity lines must be separable without sharing subsequent modifiers.
+const { splitCartLine } = require(path.join(root, 'src/hooks/useCart.ts'));
+const { calculateTotals } = require(path.join(root, 'src/services/orderService.ts'));
+const burger = { key: 'burger', kind: 'item', menuItemId: 'burger', itemPriceId: null,
+  dealId: null, name: 'Burger', sizeLabel: 'Regular', unitPrice: 50000, quantity: 2,
+  toppings: [], addOns: [] };
+const split = splitCartLine([burger], 'burger', 'burger-split');
+assert.deepEqual(split.map(line => line.quantity), [1, 1]);
+const configured = split.map(line => line.key === 'burger-split'
+  ? { ...line, toppings: [{ name: 'Cheese', price: 10000 }] } : line);
+assert.deepEqual(configured[0].toppings, []);
+assert.equal(calculateTotals(configured, 0, false, 0).subtotal, 110000);
+assert.equal(splitCartLine(split, 'burger', 'another').length, 2);
+console.log('Split-line modifier pricing check passed.');
+const { receiptService } = require(path.join(root, 'src/services/receiptService.ts'));
+const splitCheckout = await orderService.complete({ lines: configured, paymentMethod: 'cash' });
+assert.equal(splitCheckout.order.subtotal, 110000);
+const savedLines = await orderService.getOrderItems(splitCheckout.order.id);
+assert.equal(savedLines.length, 2);
+assert.equal(savedLines.filter(line => line.toppings?.some(t => t.name === 'Cheese')).length, 1);
+const receiptModel = await receiptService.build(splitCheckout.order, savedLines);
+assert.equal(receiptModel.lines.filter(line => line.toppings.some(t => t.name === 'Cheese')).length, 1);
+console.log('Split-line checkout, saved modifiers and receipt-model checks passed.');
+await Promise.all(Array.from({ length: 8 }, () => notificationService.create({
+  key: 'concurrent-dedupe-check', kind: 'order', title: 'Concurrent test',
+})));
+assert.equal((await notificationService.list(1000)).filter(n => n.key === 'concurrent-dedupe-check').length, 1);
+console.log('Concurrent notification deduplication check passed.');

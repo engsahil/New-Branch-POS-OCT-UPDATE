@@ -463,6 +463,8 @@ assert.equal(untouchedDb.transactionCount, 0);
 // A backup exported by the 3.x release predates the notification and audit
 // stores. It must still restore without being rejected for missing stores.
 const preUpgrade = structuredClone(fileRoundTrip);
+// Older v2 backups predate count metadata.
+delete preUpgrade.storeCounts;
 preUpgrade.application.version = '3.1.0';
 preUpgrade.source.databaseVersion = 6;
 preUpgrade.schema.databaseVersion = 6;

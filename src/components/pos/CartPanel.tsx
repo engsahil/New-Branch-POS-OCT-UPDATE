@@ -31,6 +31,7 @@ export interface CartPanelProps {
   onIncrement: (key: string) => void;
   onDecrement: (key: string) => void;
   onRemove: (key: string) => void;
+  onSplit: (key: string) => void;
   onClear: () => void;
   onComplete: (input: CartCompletionInput) => void;
   onUpdateToppings: (key: string, toppings: SelectedTopping[]) => void;
@@ -45,6 +46,7 @@ export function CartPanel({
   onIncrement,
   onDecrement,
   onRemove,
+  onSplit,
   onClear,
   onComplete,
   onUpdateToppings,
@@ -230,6 +232,15 @@ export function CartPanel({
                     Add-ons{line.addOns.length ? ` (${line.addOns.length})` : ''}
                   </button>
                 </div>
+
+                {line.quantity > 1 ? (
+                  <div>
+                    <span className={styles.lineMeta}>Modifiers apply to all {line.quantity} items on this line. </span>
+                    <button type="button" onClick={() => onSplit(line.key)}>
+                      Split one item
+                    </button>
+                  </div>
+                ) : null}
 
                 {isExpanded && picker === 'toppings' ? (
                   <div style={{ border: '1px solid var(--color-border)', borderRadius: '8px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '6px', background: 'var(--color-surface-alt)' }}>

@@ -174,6 +174,8 @@ if (!(await db.get(STORES.syncQueue, localQueue.id))) {
 const conflict = structuredClone(backup);
 conflict.stores.menuItems.push({ ...base('must-not-partially-write', future), name: 'Atomic preflight guard' });
 conflict.stores.orders.push({ ...base('order-conflict', future), orderNumber: 'A-0001', status: 'completed' });
+conflict.storeCounts.menuItems++;
+conflict.storeCounts.orders++;
 let conflictRejected = false;
 try {
   await dataPortService.importBackup(conflict);
@@ -244,3 +246,64 @@ if (await db.get(STORES.menuItems, 'must-not-partially-write')) {
 console.log(
   'IndexedDB checks passed: isolated schema migration, 15-store export snapshot, relationship preservation, backup preview/exclusions, safe merge and monotonic sequence, unique-conflict preflight, local credential/queue preservation, and atomic rollback.',
 );
+
+// Multi-week round trip through the actual IndexedDB adapter, in this test's
+// isolated fake database only. No browser or restaurant data is touched.
+const assert = require('node:assert/strict');
+const { salesService } = require(path.join(root, 'src/services/salesService.ts'));
+const { orderService } = require(path.join(root, 'src/services/orderService.ts'));
+// Complete the minimal legacy fixture for the report's product breakdown.
+await db.put(STORES.orderItems, { ...fixtures.orderItems[0], name: 'Burger', unitPrice: 900, lineTotal: 900 });
+await db.put(STORES.sales, { ...fixtures.sales[0], completedAt: now, subtotal: 900, discountTotal: 0,
+  taxTotal: 0, itemCount: 1, paymentMethod: 'cash', orderType: 'takeaway' });
+const dates = [];
+for (let i = 0; i < 35; i++) {
+  const day = new Date(Date.UTC(2026, 8, 1 + i, 12));
+  const at = day.toISOString();
+  const date = at.slice(0, 10);
+  dates.push(date);
+  const orderId = `multi-order-${i}`;
+  const number = `W-${String(i + 1).padStart(4, '0')}`;
+  const amount = 110000 + i;
+  await db.put(STORES.orders, { ...base(orderId, at), createdAt: at, orderNumber: number,
+    status: i === 3 ? 'cancelled' : 'completed', orderType: 'takeaway', completedAt: at,
+    customerId: 'customer-1', subtotal: amount, discountTotal: 0, taxTotal: 0, grandTotal: amount });
+  await db.put(STORES.orderItems, { ...base(`multi-line-${i}`, at), createdAt: at,
+    orderId, menuItemId: 'product-burger', name: 'Burger', unitPrice: 50000, quantity: 1,
+    discount: 0, lineTotal: 60000, toppings: [{ name: 'Cheese', price: 10000 }] });
+  await db.put(STORES.sales, { ...base(`multi-sale-${i}`, at), createdAt: at, orderId,
+    orderNumber: number, businessDate: date, completedAt: at, orderType: 'takeaway',
+    customerId: 'customer-1', subtotal: amount, discountTotal: 0, taxTotal: 0,
+    grandTotal: amount, paymentMethod: 'cash', itemCount: 1,
+    cancelledAt: i === 3 ? at : null, refundedAt: i === 4 ? at : null });
+}
+const period = { from: dates[0], to: dates[dates.length - 1] };
+const beforeReport = await salesService.report(period);
+const multiBackup = JSON.parse(JSON.stringify(await dataPortService.exportBackup()));
+const multiPreview = dataPortService.previewBackup(multiBackup);
+assert.equal(multiPreview.storeCounts.sales, multiBackup.stores.sales.length);
+assert.equal(multiBackup.storeCounts.sales, multiBackup.stores.sales.length);
+const truncated = structuredClone(multiBackup);
+truncated.stores.sales.pop();
+await assert.rejects(dataPortService.importBackup(truncated), /counts do not match/);
+assert.equal(multiBackup.stores.sales.filter(row => row.id.startsWith('multi-sale-')).length, 35);
+// Clearing is deliberately restricted to this isolated fake-indexeddb instance.
+for (const store of Object.keys(multiBackup.stores)) await db.clear(store);
+await dataPortService.importBackup(multiBackup);
+for (const [store, rows] of Object.entries(multiBackup.stores)) {
+  assert.deepEqual(await db.getAll(store), rows, `${store} round trips unchanged`);
+}
+const afterReport = await salesService.report(period);
+assert.equal(afterReport.netSales, beforeReport.netSales);
+assert.equal(afterReport.orderCount, beforeReport.orderCount);
+assert.ok(afterReport.sales.some(row => row.id === 'multi-sale-34'), 'latest week is present in report');
+const history = (await orderService.history()).filter(row => row.order.id.startsWith('multi-order-'));
+assert.equal(history.length, 35);
+assert.deepEqual(history.map(row => row.order.id), [...history].sort((a, b) =>
+  b.order.createdAt.localeCompare(a.order.createdAt) || b.order.id.localeCompare(a.order.id)).map(row => row.order.id));
+assert.equal(new Set(Array.from({ length: Math.ceil(history.length / 10) }, (_, page) =>
+  history.slice(page * 10, (page + 1) * 10)).flat().map(row => row.order.id)).size, 35);
+const repeated = await dataPortService.importBackup(multiBackup);
+assert.equal(repeated.added, 0);
+assert.equal((await db.getAll(STORES.sales)).length, multiBackup.stores.sales.length);
+console.log('Multi-week IndexedDB backup: snapshot, clean restore, history and report totals verified in isolation.');

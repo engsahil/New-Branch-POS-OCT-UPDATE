@@ -374,6 +374,7 @@ export default function PosPage() {
               onIncrement={cart.incrementLine}
               onDecrement={cart.decrementLine}
               onRemove={cart.removeLine}
+              onSplit={cart.splitLine}
               onClear={cart.clear}
               onComplete={(input) => void handleComplete(input)}
               onUpdateToppings={cart.updateLineToppings}

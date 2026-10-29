@@ -1,5 +1,6 @@
 import { Suspense, useEffect, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
+import { ROUTE_PATHS } from '@/app/routes';
 import { AppTour } from '@/components/onboarding/AppTour';
 import { SetupWizard } from '@/components/onboarding/SetupWizard';
 import { onboardingService } from '@/services/onboardingService';
@@ -14,10 +15,11 @@ import styles from './AppLayout.module.css';
 /**
  * Application shell.
  *
- * The sidebar carries navigation, a slim header hosts the notification
- * centre, and each screen supplies its own heading via PageHeader.
+ * The sidebar carries navigation; the dashboard alone hosts the identity,
+ * notification centre and account header. Screens supply their own headings.
  */
 export function AppLayout() {
+  const { pathname } = useLocation();
   const [needsSetup, setNeedsSetup] = useState<boolean | null>(null);
 
   /*
@@ -44,7 +46,7 @@ export function AppLayout() {
       <Sidebar />
 
       <div className={styles.body}>
-        <GlobalHeader />
+        {pathname === ROUTE_PATHS.dashboard ? <GlobalHeader /> : null}
         <OfflineBanner />
         {/* Renders nothing unless a sync backend is configured. */}
         <div className={styles.syncSlot} data-print-hide>

@@ -395,6 +395,40 @@ const lastRowClear = await page.evaluate(() => {
 });
 check(lastRowClear, 'last order row Receipt scrolls clear of the tab bar at 390px');
 
+// v6.1 work-in-progress: dashboard-only chrome and viewport-based read state.
+await page.setViewport({ width: 1440, height: 900 });
+check(!(await page.$('button[aria-label^="Notifications"]')), 'notification control absent on Sales');
+await page.evaluate(async () => {
+  const db = await new Promise((resolve, reject) => {
+    const req = indexedDB.open('pos-db'); req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
+  });
+  const tx = db.transaction('notifications', 'readwrite');
+  const done = new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); });
+  for (let i = 0; i < 12; i++) {
+    const at = new Date(Date.now() + i * 1000).toISOString();
+    tx.objectStore('notifications').put({ id: `view-${i}`, key: `view-${i}`, createdAt: at,
+      updatedAt: at, deletedAt: null, rev: 1, kind: 'order', severity: 'info',
+      title: `Visible test ${i}`, body: 'Test message', readAt: null });
+  }
+  await done; db.close();
+});
+await page.goto(`${BASE}/dashboard`, { waitUntil: 'networkidle2' });
+await page.waitForSelector('button[aria-label^="Notifications"]');
+check(Boolean(await page.$('button[aria-label^="Notifications"]')), 'notification control present on Dashboard');
+await page.click('button[aria-label^="Notifications"]');
+await text('Visible test 11');
+await page.waitForFunction(async () => {
+  const db = await new Promise(resolve => { const r = indexedDB.open('pos-db'); r.onsuccess = () => resolve(r.result); });
+  const value = await new Promise(resolve => { const r = db.transaction('notifications').objectStore('notifications').get('view-11'); r.onsuccess = () => resolve(r.result); });
+  db.close(); return Boolean(value?.readAt);
+});
+const unseen = await page.evaluate(async () => {
+  const db = await new Promise(resolve => { const r = indexedDB.open('pos-db'); r.onsuccess = () => resolve(r.result); });
+  const value = await new Promise(resolve => { const r = db.transaction('notifications').objectStore('notifications').get('view-0'); r.onsuccess = () => resolve(r.result); });
+  db.close(); return !value.readAt;
+});
+check(unseen, 'visible notification marked read while offscreen notification stays unread');
+
 const jsErrors = pageErrors.filter((m) => !/injected/.test(m));
 check(jsErrors.length === 0, `no unhandled page errors (got: ${jsErrors.join(' | ') || 'none'})`);
 
