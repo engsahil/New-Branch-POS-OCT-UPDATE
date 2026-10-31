@@ -29,3 +29,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${{ inputs.tag || 'v6.1.0' }}" POS-v6.1.0-FINAL-VERIFIED.zip --clobber
+      - name: Download the published asset and verify its checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p release-download
+          gh release download "${{ inputs.tag || 'v6.1.0' }}" --pattern POS-v6.1.0-FINAL-VERIFIED.zip --dir release-download
+          sha256sum POS-v6.1.0-FINAL-VERIFIED.zip release-download/POS-v6.1.0-FINAL-VERIFIED.zip
+          cmp POS-v6.1.0-FINAL-VERIFIED.zip release-download/POS-v6.1.0-FINAL-VERIFIED.zip
