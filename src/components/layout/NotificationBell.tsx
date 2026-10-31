@@ -23,7 +23,7 @@ function severityClass(notification: NotificationRecord): string {
  */
 export function NotificationBell() {
   const navigate = useNavigate();
-  const { notifications, unreadCount, markRead, markAllRead, loading, error, reload } = useNotifications(30);
+  const { notifications, unreadCount, markRead, markAllRead, markingAllRead, loading, error, reload } = useNotifications(30);
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -80,8 +80,9 @@ export function NotificationBell() {
     };
   }, [open]);
 
-  async function openNotification(notification: NotificationRecord) {
-    await markRead(notification.id);
+  function openNotification(notification: NotificationRecord) {
+    // One click owns the read action; navigation must not wait for a second click.
+    void markRead(notification.id);
     setOpen(false);
     if (notification.link) navigate(notification.link);
   }
@@ -117,7 +118,7 @@ export function NotificationBell() {
               variant="ghost"
               size="sm"
               onClick={() => void markAllRead()}
-              disabled={unreadCount === 0}
+              disabled={unreadCount === 0 || markingAllRead}
             >
               Mark all read
             </Button>
@@ -133,7 +134,8 @@ export function NotificationBell() {
                   <button
                     type="button"
                     className={`${styles.item} ${notification.readAt ? '' : styles.unread}`}
-                    onClick={() => void openNotification(notification)}
+                    onClick={() => openNotification(notification)}
+                    aria-label={`${notification.readAt ? 'Read' : 'Unread'} notification: ${notification.title}`}
                   >
                     <span className={`${styles.dot} ${severityClass(notification)}`} aria-hidden="true">
                       {notification.severity === 'critical' ? (

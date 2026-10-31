@@ -1,5 +1,26 @@
 # Changelog
 
+## 6.1.0 — focused UI update (source package)
+
+### Fixed
+- Current Order cart lines no longer collapse/overlap: separated item cards,
+  bounded scrollable item region, expandable payment fields, static mobile footer.
+- Uploaded restaurant logo replaces the default sidebar mark and stays in sync
+  with receipts; removed duplicate POS-page branding.
+- Notification read state updates immediately on one click/open and persists.
+
+### Added
+- Dedicated Reports analytics page (Sales unchanged): period presets/custom range,
+  comparison, KPI cards, lightweight line/bar/doughnut charts, product/category,
+  payment, status and tax summaries, period table and CSV export.
+- Profile picture and optional job title, department, address and bio on the
+  existing local administrator record; required full-name validation.
+- Synthetic service and browser regressions for the above.
+
+### Preserved
+- Version 6.1.0, IndexedDB v9, checkout/pricing/tax/refund rules, authentication,
+  backup/restore, Sales interface and existing navigation. No new runtime dependency.
+
 ## 6.1.0 — 2026-10-30
 
 ### Added

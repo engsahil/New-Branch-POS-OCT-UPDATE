@@ -14,6 +14,19 @@ import type { RestaurantLogo, RestaurantRecord, StoredImage } from '@/types/doma
 /** Fixed key for the single restaurant profile. */
 export const RESTAURANT_PROFILE_ID = 'restaurant-profile';
 
+type Listener = () => void;
+const listeners = new Set<Listener>();
+const channel = typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('pos.restaurant.changed') : null;
+if (channel) channel.onmessage = () => { for (const listener of listeners) listener(); };
+export function subscribeRestaurantProfile(listener: Listener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+function notifyRestaurantProfileChanged(): void {
+  for (const listener of listeners) listener();
+  channel?.postMessage('changed');
+}
+
 /** The editable surface of the profile. */
 export interface RestaurantProfileInput {
   name: string;
@@ -112,31 +125,29 @@ export const restaurantService = {
     const values = normalise(input);
     const existing = await restaurantRepository.getById(RESTAURANT_PROFILE_ID);
 
-    if (existing) {
-      return restaurantRepository.update(RESTAURANT_PROFILE_ID, {
-        ...values,
-        deletedAt: null,
-      } as Partial<RestaurantRecord>);
-    }
-
-    return restaurantRepository.create({
-      id: RESTAURANT_PROFILE_ID,
-      ...values,
-    });
+    const record = existing
+      ? await restaurantRepository.update(RESTAURANT_PROFILE_ID, { ...values, deletedAt: null } as Partial<RestaurantRecord>)
+      : await restaurantRepository.create({ id: RESTAURANT_PROFILE_ID, ...values });
+    notifyRestaurantProfileChanged();
+    return record;
   },
 
   /** Remove the logo while leaving the rest of the profile intact. */
   async removeLogo(): Promise<RestaurantRecord | undefined> {
     const existing = await restaurantRepository.getById(RESTAURANT_PROFILE_ID);
     if (!existing) return undefined;
-    return restaurantRepository.update(RESTAURANT_PROFILE_ID, { logo: null });
+    const record = await restaurantRepository.update(RESTAURANT_PROFILE_ID, { logo: null });
+    notifyRestaurantProfileChanged();
+    return record;
   },
 
   /** Remove only the dashboard banner. */
   async removeBanner(): Promise<RestaurantRecord | undefined> {
     const existing = await restaurantRepository.getById(RESTAURANT_PROFILE_ID);
     if (!existing) return undefined;
-    return restaurantRepository.update(RESTAURANT_PROFILE_ID, { banner: null });
+    const record = await restaurantRepository.update(RESTAURANT_PROFILE_ID, { banner: null });
+    notifyRestaurantProfileChanged();
+    return record;
   },
 };
 

@@ -1,5 +1,5 @@
 import type { ISODateString } from './common';
-import type { AdminRecord } from './domain';
+import type { AdminRecord, StoredImage } from './domain';
 
 /**
  * Persisted admin credential record. Never contains a plaintext password.
@@ -17,6 +17,11 @@ export interface AuthUser {
   displayName?: string;
   email?: string;
   phone?: string;
+  avatar?: StoredImage | null;
+  jobTitle?: string;
+  department?: string;
+  address?: string;
+  bio?: string;
 }
 
 /** Persisted session. Holds no credential material. */

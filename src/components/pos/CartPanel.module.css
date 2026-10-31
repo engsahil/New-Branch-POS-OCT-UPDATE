@@ -1,357 +1,79 @@
-.panel {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  background-color: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
+/* The cart is a bounded flex column. The item region owns the remaining
+   height; the compact checkout footer never consumes the whole panel. */
+.panel { display:flex; flex-direction:column; min-height:0; background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); overflow:hidden; }
+.header { display:flex; align-items:baseline; justify-content:space-between; gap:var(--sp-3); flex-shrink:0; padding:var(--sp-4); border-bottom:1px solid var(--color-border-subtle); }
+.title { font-size:var(--fs-md); font-weight:var(--fw-semibold); color:var(--color-text); }
+.count { font-size:var(--fs-xs); color:var(--color-text-muted); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.empty { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:var(--sp-1); padding:var(--sp-8) var(--sp-4); text-align:center; }
+.emptyText { font-size:var(--fs-md); font-weight:var(--fw-medium); color:var(--color-text-secondary); }
+.emptyHint { font-size:var(--fs-sm); color:var(--color-text-muted); max-width:28ch; }
+.orderBody { flex:1 1 auto; min-height:180px; overflow-y:auto; overscroll-behavior:contain; scrollbar-gutter:stable; padding:var(--sp-3); }
+.listHeading { display:flex; justify-content:space-between; gap:var(--sp-2); margin-bottom:var(--sp-2); color:var(--color-text-muted); font-size:var(--fs-xs); font-weight:var(--fw-medium); }
+.lines { display:flex; flex-direction:column; gap:var(--sp-3); list-style:none; margin:0; padding:0; }
+.line { display:flex; flex-direction:column; gap:var(--sp-3); min-width:0; padding:var(--sp-3); border:1px solid var(--color-border); border-radius:var(--radius-md); background:var(--color-surface); box-shadow:var(--shadow-xs); }
+.lineHeading { display:flex; align-items:flex-start; justify-content:space-between; gap:var(--sp-2); }
+.lineName { flex:1; min-width:0; margin:0; font-size:var(--fs-sm); font-weight:var(--fw-semibold); line-height:1.4; color:var(--color-text); overflow-wrap:anywhere; }
+.lineDetails { display:flex; flex-wrap:wrap; gap:var(--sp-2) var(--sp-4); margin:0; font-size:var(--fs-xs); }
+.lineDetails div { display:flex; flex-wrap:wrap; gap:var(--sp-1); }
+.lineDetails dt { color:var(--color-text-muted); }
+.lineDetails dd { margin:0; color:var(--color-text); font-weight:var(--fw-medium); font-variant-numeric:tabular-nums; }
+.modifierSummary { display:flex; flex-direction:column; gap:var(--sp-1); padding:var(--sp-2); margin:0; list-style:none; background:var(--color-surface-alt); border-radius:var(--radius-sm); font-size:var(--fs-xs); }
+.modifierSummary li { display:flex; justify-content:space-between; align-items:flex-start; gap:var(--sp-2); }
+.modifierSummary li>span:first-child { min-width:0; overflow-wrap:anywhere; }
+.modifierSummary li>span:last-child { flex-shrink:0; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.modifierSummary small { display:block; color:var(--color-text-muted); font-size:var(--fs-2xs); }
+.noModifiers,.lineHint,.saving { margin:0; font-size:var(--fs-xs); line-height:1.45; color:var(--color-text-muted); }
+.saving { color:var(--color-success); }
+.lineControls { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:var(--sp-2); }
+.stepper { display:inline-flex; align-items:center; flex-shrink:0; border:1px solid var(--color-border-strong); border-radius:var(--radius-md); overflow:hidden; }
+.stepButton,.remove { display:grid; place-items:center; flex-shrink:0; width:40px; height:40px; border:0; background:transparent; color:var(--color-text-secondary); cursor:pointer; }
+.stepButton:hover,.remove:hover { background:var(--color-hover); color:var(--color-text); }
+.remove { width:32px; height:32px; border-radius:var(--radius-sm); color:var(--color-text-muted); }
+.remove:hover { background:var(--color-danger-soft); color:var(--color-danger); }
+.stepButton:focus-visible,.remove:focus-visible,.modifierButton:focus-visible,.splitButton:focus-visible,.paymentToggle:focus-visible { outline:2px solid var(--color-focus-ring); outline-offset:-2px; }
+.stepButton:disabled,.remove:disabled { opacity:.5; cursor:default; }
+.quantity { min-width:36px; height:40px; display:grid; place-items:center; font-size:var(--fs-sm); font-weight:var(--fw-semibold); font-variant-numeric:tabular-nums; border-inline:1px solid var(--color-border-subtle); }
+.lineSubtotal { display:flex; flex-direction:column; align-items:flex-end; gap:2px; margin-left:auto; font-variant-numeric:tabular-nums; }
+.lineSubtotal span { font-size:var(--fs-2xs); color:var(--color-text-muted); }
+.lineSubtotal strong { font-size:var(--fs-sm); color:var(--color-text); overflow-wrap:anywhere; }
+.modifierActions { display:flex; flex-wrap:wrap; gap:var(--sp-2); }
+.modifierButton,.splitButton { min-height:36px; padding:var(--sp-1) var(--sp-2); border:1px solid var(--color-border); border-radius:var(--radius-sm); background:var(--color-surface); color:var(--color-text-secondary); font-size:var(--fs-xs); cursor:pointer; }
+.splitButton { flex-basis:100%; text-align:left; }
+.modifierButton:hover,.modifierButton[aria-expanded='true'],.splitButton:hover { background:var(--color-selected); border-color:var(--color-primary); color:var(--color-primary); }
+.modifierPicker { display:flex; flex-direction:column; gap:var(--sp-2); padding:var(--sp-3); border:1px solid var(--color-border); border-radius:var(--radius-md); background:var(--color-surface-alt); }
+.modifierChoice { display:flex; align-items:center; gap:var(--sp-2); min-height:36px; font-size:var(--fs-sm); cursor:pointer; }
+.modifierChoice input { flex-shrink:0; width:18px; height:18px; accent-color:var(--color-primary); }
+.modifierChoice span:first-of-type { flex:1; min-width:0; overflow-wrap:anywhere; }
+.modifierChoice span:last-child { flex-shrink:0; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.selectedModifiers { display:flex; flex-wrap:wrap; gap:var(--sp-1); }
+.selectedModifiers button { padding:var(--sp-2); background:var(--color-accent-soft); color:var(--color-primary); border-radius:var(--radius-sm); font-size:var(--fs-xs); text-align:left; overflow-wrap:anywhere; }
+.footer { flex-shrink:0; border-top:1px solid var(--color-border); padding:var(--sp-3) var(--sp-4); background:var(--color-surface-alt); }
+.totals { display:flex; flex-direction:column; gap:var(--sp-1); margin:0 0 var(--sp-2); }
+.totalRow { display:flex; align-items:baseline; justify-content:space-between; gap:var(--sp-3); font-size:var(--fs-xs); color:var(--color-text-secondary); }
+.totalRow dd { margin:0; font-variant-numeric:tabular-nums; text-align:right; }
+.grandRow { padding-top:var(--sp-2); border-top:1px solid var(--color-border); font-size:var(--fs-sm); font-weight:var(--fw-semibold); color:var(--color-text); }
+.grandValue { font-size:var(--fs-lg); font-weight:var(--fw-semibold); }
+.discountRow { color:var(--color-text-secondary); }
+.paymentToggle { display:flex; justify-content:space-between; gap:var(--sp-2); width:100%; min-height:36px; margin-bottom:var(--sp-2); padding:var(--sp-2); border:1px solid var(--color-border); border-radius:var(--radius-sm); background:var(--color-surface); color:var(--color-text-secondary); font-size:var(--fs-xs); cursor:pointer; }
+.paymentToggle span:last-child { color:var(--color-primary); font-weight:var(--fw-semibold); }
+.payment { display:flex; flex-direction:column; gap:var(--sp-3); margin-top:var(--sp-3); padding:var(--sp-3); border:1px solid var(--color-border); border-radius:var(--radius-md); background:var(--color-surface); }
+.returnRow { display:flex; align-items:baseline; justify-content:space-between; gap:var(--sp-3); font-size:var(--fs-sm); }
+.returnLabel,.returnValue { font-weight:var(--fw-medium); }
+.returnValue { font-variant-numeric:tabular-nums; }
+.returnValueActive { color:var(--color-success); }
+.methods { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--sp-2); }
+.method { display:flex; align-items:center; gap:var(--sp-2); min-height:36px; font-size:var(--fs-sm); cursor:pointer; }
+.methodInput { width:16px; height:16px; margin:0; accent-color:var(--color-accent); }
+.actions { display:flex; gap:var(--sp-2); }
+.actions>button { min-height:44px; }
+/* On short desktop windows the panel itself can scroll rather than reducing
+   the item region to zero. On phones the page owns vertical scrolling. */
+@media (max-height:680px) and (min-width:820px) { .panel { overflow-y:auto; } .orderBody { flex:1 0 220px; } .footer { position:sticky; bottom:0; z-index:1; } }
+@media (max-width:819px) {
+  .panel { overflow:visible; }
+  .orderBody { flex:none; min-height:0; max-height:min(52vh,420px); overflow-y:auto; padding:var(--sp-3); }
+  /* Static on stacked layouts: a sticky payment block must never cover item controls. */
+  .footer { position:static; box-shadow:none; }
 }
-
-.header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  padding: var(--sp-4);
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-
-.title {
-  font-size: var(--fs-md);
-  font-weight: var(--fw-semibold);
-  color: var(--color-text);
-}
-
-.count {
-  font-size: var(--fs-xs);
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-/* ---------- Empty ---------- */
-
-.empty {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sp-1);
-  padding: var(--sp-8) var(--sp-4);
-  text-align: center;
-}
-
-.emptyText {
-  font-size: var(--fs-md);
-  font-weight: var(--fw-medium);
-  color: var(--color-text-secondary);
-}
-
-.emptyHint {
-  font-size: var(--fs-sm);
-  color: var(--color-text-muted);
-  max-width: 28ch;
-}
-
-/* ---------- Lines ---------- */
-
-.lines {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.line {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-4);
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-
-.line:last-child {
-  border-bottom: none;
-}
-
-.lineMain {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.lineName {
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
-  color: var(--color-text);
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-
-.lineMeta {
-  font-size: var(--fs-xs);
-  color: var(--color-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.lineControls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-3);
-}
-
-.stepper {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-
-.stepButton {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  transition:
-    background-color var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out);
-}
-
-.stepButton:hover {
-  background-color: var(--color-hover);
-  color: var(--color-text);
-}
-
-.stepButton:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: -2px;
-}
-
-.quantity {
-  min-width: 34px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
-  color: var(--color-text);
-  font-variant-numeric: tabular-nums;
-  border-inline: 1px solid var(--color-border-subtle);
-}
-
-.lineTotal {
-  margin-left: auto;
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-medium);
-  color: var(--color-text);
-  font-variant-numeric: tabular-nums;
-}
-
-.remove {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-faint);
-  cursor: pointer;
-  transition:
-    background-color var(--dur-fast) var(--ease-out),
-    color var(--dur-fast) var(--ease-out);
-}
-
-.remove:hover {
-  background-color: var(--color-danger-soft);
-  color: var(--color-danger);
-}
-
-.remove:focus-visible {
-  outline: 2px solid var(--color-focus-ring);
-  outline-offset: 1px;
-}
-
-/* ---------- Totals ---------- */
-
-.footer {
-  border-top: 1px solid var(--color-border);
-  padding: var(--sp-4);
-  background-color: var(--color-surface-alt);
-}
-
-.totals {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-4);
-}
-
-.totalRow {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  font-size: var(--fs-sm);
-  color: var(--color-text-secondary);
-}
-
-.totalRow dd {
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.grandRow {
-  padding-top: var(--sp-2);
-  border-top: 1px solid var(--color-border);
-  font-size: var(--fs-md);
-  color: var(--color-text);
-}
-
-.grandValue {
-  font-size: var(--fs-lg);
-  font-weight: var(--fw-semibold);
-}
-
-/* Discount reduces the payable total — slightly emphasized, still quiet. */
-.discountRow {
-  color: var(--color-text);
-}
-
-.discountRow dd {
-  font-weight: var(--fw-semibold);
-}
-
-/* ---------- Payment: discount, paid, return, method ---------- */
-
-.payment {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-3);
-  margin-bottom: var(--sp-4);
-}
-
-.returnRow {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--sp-3);
-  font-size: var(--fs-md);
-  color: var(--color-text);
-}
-
-.returnLabel {
-  font-weight: var(--fw-medium);
-}
-
-.returnValue {
-  font-weight: var(--fw-semibold);
-  font-variant-numeric: tabular-nums;
-}
-
-.returnValueActive {
-  color: var(--color-success);
-}
-
-/* Payment method: one quiet radio row. */
-.methods {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-4);
-}
-
-.method {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--sp-2);
-  font-size: var(--fs-sm);
-  color: var(--color-text);
-  cursor: pointer;
-}
-
-.methodInput {
-  width: 15px;
-  height: 15px;
-  margin: 0;
-  accent-color: var(--color-accent);
-  cursor: pointer;
-}
-
-.actions {
-  display: flex;
-  gap: var(--sp-2);
-}
-
-/*
- * Stacked (mobile) POS: the panel is content-height and the page scrolls,
- * so the line list bounds itself and scrolls internally instead of
- * growing the page by every line. Matches the PosPage stacking breakpoint.
- */
-@media (max-width: 819px) {
-  .lines {
-    flex: none;
-    max-height: 38vh;
-  }
-}
-
-/*
- * Touch devices need a 44px minimum target. The visual control stays compact
- * so the cart is not dominated by chrome; the hit area is expanded with a
- * pseudo-element instead, which costs no layout space.
- */
-@media (pointer: coarse) {
-  .stepButton,
-  .remove {
-    position: relative;
-    width: 36px;
-    height: 36px;
-  }
-
-  .stepButton::after,
-  .remove::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 44px;
-    height: 44px;
-    transform: translate(-50%, -50%);
-  }
-
-  .quantity {
-    min-width: 44px;
-    height: 44px;
-  }
-}
-
-.modifierActions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
-.modifierButton { min-height: 34px; padding: var(--sp-1) var(--sp-2); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text-secondary); font-size: var(--fs-xs); }
-.modifierButton:hover, .modifierButton[aria-expanded='true'] { background: var(--color-selected); border-color: var(--color-primary); color: var(--color-primary); }
-.modifierPicker { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface-alt); }
-.modifierChoice { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-sm); cursor: pointer; }
-.modifierChoice span:first-of-type { flex: 1; overflow-wrap: anywhere; }
-.modifierChoice span:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
-.selectedModifiers { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
-.selectedModifiers button { padding: var(--sp-1) var(--sp-2); background: var(--color-accent-soft); color: var(--color-primary); border-radius: var(--radius-sm); font-size: var(--fs-xs); text-align: left; }
-.header, .footer { flex-shrink: 0; }
-.lines { flex: 1 0 0; }
-@media (max-width: 819px) {
-  .lines { flex: none; min-height: 100px; max-height: 38vh; }
-  /* Keep the essential totals/checkout block in reach while the long order
-     scrolls. The offset clears the fixed mobile navigation and safe area. */
-  .panel { overflow: visible; }
-  .header { position: sticky; top: 0; z-index: 2; background: var(--color-surface); }
-  .footer { position: sticky; bottom: calc(var(--layout-tabbar-h, 0px) + var(--safe-bottom, 0px)); z-index: 3; box-shadow: 0 -4px 12px rgb(0 0 0 / 6%); }
-}
-@media (pointer: coarse) { .modifierButton { min-height: 44px; } }
+@media (pointer:coarse) { .stepButton { width:44px; height:44px; } .quantity { height:44px; min-width:40px; } .remove { width:40px; height:40px; } .modifierButton,.splitButton,.paymentToggle { min-height:44px; } }
+@media (prefers-reduced-motion:reduce) { .stepButton,.remove,.modifierButton,.splitButton { transition:none; } }

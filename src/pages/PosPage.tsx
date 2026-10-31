@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ROUTE_PATHS } from '@/app/routes';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -18,7 +18,6 @@ import { notifyInventoryChanged } from '@/hooks/useInventory';
 import { notifySalesChanged } from '@/hooks/useSales';
 import { useMenu } from '@/hooks/useMenu';
 import { orderService, type CompletedOrder } from '@/services/orderService';
-import { restaurantService } from '@/services/restaurantService';
 import { SETTING_KEYS, settingsService } from '@/services/settingsService';
 import type { CustomerRecord, OrderType } from '@/types/domain';
 import type { CartCompletionInput } from '@/components/pos/CartPanel';
@@ -52,29 +51,6 @@ export default function PosPage() {
   );
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [deliveryNotes, setDeliveryNotes] = useState('');
-  const [businessBranding, setBusinessBranding] = useState<{
-    name: string;
-    logoDataUrl: string;
-  } | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    void restaurantService
-      .getRecord()
-      .then((profile) => {
-        if (!active || !profile?.logo?.dataUrl) return;
-        setBusinessBranding({
-          name: profile.name ?? '',
-          logoDataUrl: profile.logo.dataUrl,
-        });
-      })
-      .catch(() => {
-        // The existing POS branding remains in place if profile storage fails.
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const term = query.trim().toLowerCase();
   const visible = term
@@ -203,19 +179,6 @@ export default function PosPage() {
         }
       />
 
-      {businessBranding ? (
-        <div className={styles.storeBrand}>
-          <img
-            src={businessBranding.logoDataUrl}
-            alt={businessBranding.name ? `${businessBranding.name} logo` : 'Business logo'}
-            className={styles.storeLogo}
-            onError={() => setBusinessBranding(null)}
-          />
-          {businessBranding.name ? (
-            <span className={styles.storeName}>{businessBranding.name}</span>
-          ) : null}
-        </div>
-      ) : null}
 
       {loading ? (
         <p className={styles.loading}>Loading menu…</p>
