@@ -19,6 +19,7 @@ import {
 import type {
   OrderItemRecord,
   OrderRecord,
+  OrderStatus,
   OrderType,
   RestaurantLogo,
   SelectedAddOn,
@@ -54,6 +55,8 @@ export interface ReceiptLine {
   dealContents: string[];
   /** Value the customer saved on this deal line, if any. */
   dealSavings: Paisa;
+  /** Historical rows had no saving snapshot. */
+  dealSavingsEstimated?: boolean;
   toppings: SelectedTopping[];
   addOns: SelectedAddOn[];
   note: string | null;
@@ -77,6 +80,7 @@ export interface ReceiptModel {
   header: ReceiptHeader;
   orderNumber: string;
   orderId: ID;
+  status: OrderStatus;
   date: string;
   time: string;
   lines: ReceiptLine[];
@@ -104,6 +108,7 @@ export interface ReceiptModel {
 export interface KitchenReceiptModel {
   orderNumber: string;
   orderId: ID;
+  status: OrderStatus;
   date: string;
   time: string;
   orderType: OrderType;
@@ -216,7 +221,7 @@ export const receiptService = {
           ).filter((entry): entry is string => entry !== null);
 
           const separately = contentsValue * item.quantity;
-          dealSavings = Math.max(0, separately - item.lineTotal);
+          dealSavings = Math.max(0, separately - (item.unitPrice * item.quantity));
         }
       }
 
@@ -229,7 +234,8 @@ export const receiptService = {
         lineTotal: item.lineTotal,
         isDeal: Boolean(item.dealId),
         dealContents,
-        dealSavings,
+        dealSavings: item.dealSavings ?? dealSavings,
+        dealSavingsEstimated: item.dealSavings === undefined,
         toppings: item.toppings ?? [],
         addOns: item.addOns ?? [],
         note: orNull(item.note),
@@ -237,7 +243,7 @@ export const receiptService = {
         addOnTotal: item.addOnTotal ?? 0,
       });
 
-      savingsTotal += dealSavings;
+      savingsTotal += item.dealSavings ?? dealSavings;
     }
 
     return {
@@ -252,12 +258,13 @@ export const receiptService = {
       },
       orderNumber: order.orderNumber,
       orderId: order.id,
+      status: order.status,
       date: formatReceiptDate(order.completedAt ?? order.createdAt),
       time: formatReceiptTime(order.completedAt ?? order.createdAt),
       lines,
       subtotal: order.subtotal,
       taxTotal: order.taxTotal,
-      taxPercent: profile?.taxPercent ?? 0,
+      taxPercent: order.taxPercent ?? profile?.taxPercent ?? 0,
       savingsTotal,
       grandTotal: order.grandTotal,
       itemCount: lines.reduce((sum, l) => sum + l.quantity, 0),
@@ -284,6 +291,7 @@ export const receiptService = {
     return {
       orderNumber: customer.orderNumber,
       orderId: customer.orderId,
+      status: customer.status,
       date: customer.date,
       time: customer.time,
       orderType: customer.orderType,

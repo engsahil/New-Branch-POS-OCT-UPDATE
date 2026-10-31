@@ -1,6 +1,62 @@
-# POS — v5.1.9
+# POS — v6.1.0
 
-Offline-first Restaurant Point of Sale application. Version **5.1.9**.
+Offline-first Restaurant Point of Sale application. Version **6.1.0**.
+
+## v6.1.0 — upgrade notes
+
+- **Database v9 (additive):** adds `expenses` only. Existing IndexedDB records,
+  sign-in, menu, orders, sales, stock, purchases and settings are preserved.
+  Close other tabs before the first upgrade load. **Export All Data before
+  upgrading** and keep that file until you have checked the new version.
+- **Dashboard-only identity chrome:** restaurant name/banner, notification bell
+  and account menu live on Dashboard; other modules keep their own page headers
+  and navigation without a duplicate global header.
+- **Notifications:** persisted, deduplicated, preference-filtered and counted
+  from the same snapshot. Only rows actually viewed in the bell become read;
+  unmuting a category does not mark it read. Order, payment, stock, audit and
+  backup/system events use the matching category.
+- **POS:** independent modifier choices per cart instance, split-one-item,
+  catalog-validated modifier prices/costs, stale-deal refusal, saved deal
+  savings, post-discount tax, underpayment refusal and a reachable sticky
+  checkout block on small screens.
+- **Receipts:** customer/kitchen HTML and ESC/POS output include per-portion
+  modifier prices, saved tax mode, order type and cancelled/refunded banners.
+  Full refunds are explicit, atomic and restore stock once; they do not move
+  money. Partial refunds are not supported. 58/80 mm browser PDF pagination was
+  verified; **no physical printer was tested**.
+- **Expenses & Profit:** `/expenses` provides validated CRUD, categories, dates,
+  payee/payment/reference/notes, search/filter/sort/pagination, CSV and a
+  dismissible guide. Dashboard and Expenses share the same finance service.
+  Revenue = amount charged minus stored tax. COGS uses saved per-portion costs;
+  missing costs make profit unavailable, never zero. Operating profit = revenue
+  − COGS − operating expenses. Stock purchases are shown separately and are not
+  counted again as expenses/COGS. This is an estimate, not cash flow or audited
+  accounting. Historical rows retain their stored tax basis; new checkouts save
+  the tax rate/mode used.
+- **Backups:** full business-store JSON snapshots with counts, sales coverage,
+  CRC32 corruption checksum (not a security signature), relationship checks,
+  explicit historical manifests and origin disclosure. Import is a validated,
+  atomic, non-destructive merge by stable id (newer `updatedAt` wins); it never
+  clears a store and never replaces the destination administrator/session.
+  Review coverage and acknowledge the merge before import. A system notice is
+  recorded after a successful import. The checksum/coverage metadata is additive;
+  older supported files remain importable.
+- **CSV:** untrusted text cells that could start a spreadsheet formula are
+  neutralised; numeric cells remain numeric.
+
+### Upgrade / restore
+
+1. On the old version open Settings → Data source → **Export All Data**.
+2. Deploy/refresh v6.1.0 at the **same web address** to keep the same IndexedDB.
+   A different address/device has a separate database; use the backup to move.
+3. Check Dashboard, Sales/Orders, Inventory, Purchases and Expenses. The upgrade
+   does not seed demo records or reset data.
+4. To move/merge, open Settings → Data source → **Import Data**, review origin,
+   checksum, coverage and per-store counts, then acknowledge and merge. Re-import
+   is idempotent. Keep the pre-upgrade backup until satisfied.
+
+See `CHANGELOG.md` and `RELEASE-6.1.0.md` for the executed verification record.
+The historical v5.1.9 notes below are retained as release history.
 
 The sections below document the original architecture (still accurate) and the
 earlier 3.x behaviour. Later sections were written for those releases and are

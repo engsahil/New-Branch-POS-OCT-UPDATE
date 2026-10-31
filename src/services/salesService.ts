@@ -207,6 +207,8 @@ export interface DateRange {
 }
 
 export interface ReportBucket {
+  /** Present on daily buckets; preserves the local reporting date. */
+  date?: string;
   label: string;
   amount: Paisa;
   orderCount: number;
@@ -380,7 +382,7 @@ async function buildReport(range: DateRange): Promise<SalesReport> {
 
   const dayTotals = new Map<string, ReportBucket>();
   for (const day of eachDay(from, to)) {
-    dayTotals.set(day, { label: dayLabel(day), amount: 0, orderCount: 0 });
+    dayTotals.set(day, { date: day, label: dayLabel(day), amount: 0, orderCount: 0 });
   }
 
   const hourTotals = new Map<number, ReportBucket>();

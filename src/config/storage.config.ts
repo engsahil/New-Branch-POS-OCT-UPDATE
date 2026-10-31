@@ -18,8 +18,9 @@ export const DB_NAME = 'pos-db';
  * v6 — customers store, by_customerId index on orders
  * v7 — notifications and receipt edit audit stores (v5.1.9)
  * v8 — purchases (stock receiving) log
+ * v9 — operating expenses (v6.1.0), additive only
  */
-export const DB_VERSION = 8;
+export const DB_VERSION = 9;
 
 export const STORES = {
   admin: 'admin',
@@ -38,6 +39,7 @@ export const STORES = {
   notifications: 'notifications',
   receiptAudits: 'receiptAudits',
   purchases: 'purchases',
+  expenses: 'expenses',
   syncQueue: 'syncQueue',
 } as const;
 
@@ -218,6 +220,16 @@ export const STORE_SCHEMAS: StoreSchema[] = [
     indexes: [
       { name: 'by_receivedAt', keyPath: 'receivedAt' },
       { name: 'by_inventoryId', keyPath: 'inventoryId' },
+      { name: 'by_updatedAt', keyPath: 'updatedAt' },
+    ],
+  },
+  {
+    name: STORES.expenses,
+    keyPath: 'id',
+    description: 'Operating expense ledger, separate from inventory purchases.',
+    indexes: [
+      { name: 'by_expenseDate', keyPath: 'expenseDate' },
+      { name: 'by_category', keyPath: 'category' },
       { name: 'by_updatedAt', keyPath: 'updatedAt' },
     ],
   },

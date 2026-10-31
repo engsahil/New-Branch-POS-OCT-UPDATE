@@ -40,6 +40,7 @@ Module._extensions['.ts'] = (module, filename) => {
 const { db } = require(path.join(root, 'src/data/db/indexedDb.ts'));
 const { STORES } = require(path.join(root, 'src/config/storage.config.ts'));
 const { dataPortService } = require(path.join(root, 'src/services/dataPortService.ts'));
+const { backupChecksum } = require(path.join(root, 'src/services/dataPortCore.ts'));
 
 const now = '2026-10-02T12:00:00.000Z';
 const earlier = '2026-10-01T12:00:00.000Z';
@@ -67,7 +68,7 @@ const fixtures = {
   deals: [{ ...base('deal-combo'), name: 'Combo', items: [{ menuItemId: 'product-burger', quantity: 1 }] }],
   orders: [{ ...base('order-1'), orderNumber: 'A-0001', status: 'completed', customerId: 'customer-1', grandTotal: 900 }],
   orderItems: [{ ...base('line-1'), orderId: 'order-1', menuItemId: 'product-burger', itemPriceId: 'burger-large', quantity: 1 }],
-  sales: [{ ...base('sale-1'), orderId: 'order-1', businessDate: '2026-10-02', grandTotal: 900 }],
+  sales: [{ ...base('sale-1'), orderId: 'order-1', orderNumber: 'A-0001', completedAt: now, businessDate: '2026-10-02', grandTotal: 900 }],
   customers: [{ ...base('customer-1'), name: 'Avery Customer', phone: '555-2000', phoneKey: '5552000' }],
   toppings: [{ ...base('topping-cheese'), name: 'Cheese', price: 50 }],
   addOns: [{ ...base('addon-sauce'), name: 'Sauce', price: 25 }],
@@ -129,7 +130,7 @@ await db.put(STORES.admin, localAdmin);
 await db.put(STORES.syncQueue, localQueue);
 
 const backup = JSON.parse(JSON.stringify(await dataPortService.exportBackup()));
-const expectedStores = Object.keys(fixtures);
+const expectedStores = [...Object.keys(fixtures), STORES.expenses];
 if (JSON.stringify(Object.keys(backup.stores)) !== JSON.stringify(expectedStores)) {
   console.error('expected', expectedStores);
   console.error('actual  ', Object.keys(backup.stores));
@@ -145,7 +146,7 @@ if (backup.stores.sales[0].orderId !== backup.stores.orders[0].id) {
   throw new Error('Export broke the sale/order relationship.');
 }
 const preview = dataPortService.previewBackup(backup);
-if (preview.totalRecords !== 16 || preview.storeCounts.itemPrices !== 1) {
+if (preview.totalRecords !== Object.values(fixtures).reduce((sum, rows) => sum + rows.length, 0) || preview.storeCounts.itemPrices !== 1) {
   throw new Error('Backup preview returned incorrect record counts.');
 }
 if (!Object.hasOwn(preview.excludedStores, 'admin') || !Object.hasOwn(preview.excludedStores, 'syncQueue')) {
@@ -176,6 +177,7 @@ conflict.stores.menuItems.push({ ...base('must-not-partially-write', future), na
 conflict.stores.orders.push({ ...base('order-conflict', future), orderNumber: 'A-0001', status: 'completed' });
 conflict.storeCounts.menuItems++;
 conflict.storeCounts.orders++;
+conflict.integrity.checksum = backupChecksum(conflict.stores);
 let conflictRejected = false;
 try {
   await dataPortService.importBackup(conflict);
@@ -244,7 +246,7 @@ if (await db.get(STORES.menuItems, 'must-not-partially-write')) {
 }
 
 console.log(
-  'IndexedDB checks passed: isolated schema migration, 15-store export snapshot, relationship preservation, backup preview/exclusions, safe merge and monotonic sequence, unique-conflict preflight, local credential/queue preservation, and atomic rollback.',
+  'IndexedDB checks passed: isolated schema migration, 16-store export snapshot, relationship preservation, backup preview/exclusions, safe merge and monotonic sequence, unique-conflict preflight, local credential/queue preservation, and atomic rollback.',
 );
 
 // Multi-week round trip through the actual IndexedDB adapter, in this test's
@@ -291,7 +293,10 @@ assert.equal(multiBackup.stores.sales.filter(row => row.id.startsWith('multi-sal
 for (const store of Object.keys(multiBackup.stores)) await db.clear(store);
 await dataPortService.importBackup(multiBackup);
 for (const [store, rows] of Object.entries(multiBackup.stores)) {
-  assert.deepEqual(await db.getAll(store), rows, `${store} round trips unchanged`);
+  const restored = await db.getAll(store);
+  const importNotices = store === STORES.notifications ? restored.filter((row) => row.key?.startsWith('backup:')) : [];
+  assert.deepEqual(restored.filter((row) => !importNotices.includes(row)), rows.filter((row) => !row.key?.startsWith('backup:')), `${store} round trips unchanged`);
+  if (store === STORES.notifications) assert.ok(importNotices.length >= 1, 'restore emits a system notice');
 }
 const afterReport = await salesService.report(period);
 assert.equal(afterReport.netSales, beforeReport.netSales);

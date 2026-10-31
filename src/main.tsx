@@ -87,6 +87,10 @@ if (import.meta.env.VITE_EXPOSE_TEST_API === 'true') {
       addOns,
       syncEngineMod,
       syncQueueMod,
+      dataPort,
+      expenses,
+      finance,
+      notifications,
     ] = await Promise.all([
       import('@/services/menuService'),
       import('@/services/dealService'),
@@ -103,6 +107,10 @@ if (import.meta.env.VITE_EXPOSE_TEST_API === 'true') {
       import('@/services/addOnService'),
       import('@/services/sync/syncEngine'),
       import('@/services/syncQueueService'),
+      import('@/services/dataPortService'),
+      import('@/services/expenseService'),
+      import('@/services/financeService'),
+      import('@/services/notificationService'),
     ]);
 
     (window as unknown as { __pos: unknown }).__pos = {
@@ -123,6 +131,10 @@ if (import.meta.env.VITE_EXPOSE_TEST_API === 'true') {
       syncEngine: syncEngineMod.syncEngine,
       syncQueueService: syncQueueMod.syncQueueService,
       installService,
+      dataPortService: dataPort.dataPortService,
+      expenseService: expenses.expenseService,
+      financeService: finance.financeService,
+      notificationService: notifications.notificationService,
     };
   })();
 }

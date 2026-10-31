@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ReceiptModel, ReceiptWidth } from '@/services/receiptService';
-import { receiptOrderTypeLabel } from '@/utils/receipt';
+import { receiptOrderTypeLabel, receiptModifierLabel, receiptStatusLabel } from '@/utils/receipt';
 import { formatMoney } from '@/utils/currency';
 import { formatPaymentMethod } from '@/utils/payment';
 import styles from './Receipt.module.css';
@@ -61,6 +61,7 @@ export function Receipt({ model, width }: ReceiptProps) {
         ) : null}
       </header>
 
+      {receiptStatusLabel(model.status) ? <p className={styles.voidBanner} role="status">{receiptStatusLabel(model.status)}</p> : null}
       <div className={styles.rule} />
 
       {/* ---------- Order meta ---------- */}
@@ -143,7 +144,7 @@ export function Receipt({ model, width }: ReceiptProps) {
               <ul className={styles.dealContents}>
                 {line.toppings.map((t, idx) => (
                   <li key={`top-${idx}`} className={styles.dealContent}>
-                    + {t.name} {t.price > 0 ? `(${formatMoney(t.price, { withSymbol: false })})` : ''}
+                    + {receiptModifierLabel(t, line.quantity)}
                   </li>
                 ))}
               </ul>
@@ -153,7 +154,7 @@ export function Receipt({ model, width }: ReceiptProps) {
               <ul className={styles.dealContents}>
                 {line.addOns.map((a, idx) => (
                   <li key={`addon-${idx}`} className={styles.dealContent}>
-                    + {a.name} {a.price > 0 ? `(${formatMoney(a.price, { withSymbol: false })})` : ''}
+                    + {receiptModifierLabel(a, line.quantity)}
                   </li>
                 ))}
               </ul>
@@ -192,7 +193,7 @@ export function Receipt({ model, width }: ReceiptProps) {
 
         {model.savingsTotal > 0 ? (
           <div className={styles.totalRow}>
-            <dt>Deal savings</dt>
+            <dt>{model.lines.some((line) => line.dealSavingsEstimated && line.dealSavings > 0) ? 'Deal savings (current menu estimate)' : 'Deal savings (at checkout)'}</dt>
             <dd>-{formatMoney(model.savingsTotal)}</dd>
           </div>
         ) : null}
@@ -211,7 +212,7 @@ export function Receipt({ model, width }: ReceiptProps) {
           <dd>{formatMoney(model.grandTotal)}</dd>
         </div>
 
-        {model.amountPaid != null ? (
+        {model.status === 'completed' && model.amountPaid != null ? (
           <>
             <div className={styles.totalRow}>
               <dt>Payment method</dt>

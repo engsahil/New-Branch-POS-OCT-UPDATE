@@ -24,6 +24,7 @@ import type { NavItem } from '@/types/navigation';
 
 const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
 const PosPage = lazy(() => import('@/pages/PosPage'));
+const ExpensesPage = lazy(() => import('@/pages/ExpensesPage'));
 const SalesPage = lazy(() => import('@/pages/SalesPage'));
 const CustomersPage = lazy(() => import('@/pages/CustomersPage'));
 const MenuPage = lazy(() => import('@/pages/MenuPage'));
@@ -47,6 +48,7 @@ export const ROUTE_PATHS = {
   deliveries: '/deliveries',
   purchases: '/purchases',
   reports: '/reports',
+  expenses: '/expenses',
   profile: '/profile',
 } as const;
 
@@ -73,6 +75,7 @@ export const appRoutes: AppRoute[] = [
   { id: 'deliveries', path: 'deliveries', element: <DeliveryPage /> },
   { id: 'purchases', path: 'purchases', element: <PurchasesPage /> },
   { id: 'reports', path: 'reports', element: <SalesPage /> },
+  { id: 'expenses', path: 'expenses', element: <ExpensesPage /> },
   { id: 'profile', path: 'profile', element: <ProfilePage /> },
   { id: 'not-found', path: '*', element: <NotFoundPage /> },
 ];
@@ -160,6 +163,10 @@ export const NAV_ITEMS: NavItem[] = [
     icon: ReportsIcon,
     primary: true,
     matchChildren: true,
+  },
+  {
+    id: 'expenses', label: 'Expenses & Profit', mobileLabel: 'Expenses', description: 'Costs & profit',
+    path: ROUTE_PATHS.expenses, icon: ReportsIcon, primary: true, matchChildren: true,
   },
   {
     id: 'deliveries',

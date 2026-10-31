@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui';
+import { ROUTE_PATHS } from '@/app/routes';
+import { Button} from '@/components/ui';
 import { AlertIcon, BellIcon, CheckIcon } from '@/components/ui/Icons';
 import { useNotifications } from '@/hooks/useNotifications';
 import { formatRelativeTime } from '@/utils/date';
@@ -22,7 +23,7 @@ function severityClass(notification: NotificationRecord): string {
  */
 export function NotificationBell() {
   const navigate = useNavigate();
-  const { notifications, unreadCount, markRead, markAllRead } = useNotifications(30);
+  const { notifications, unreadCount, markRead, markAllRead, loading, error, reload } = useNotifications(30);
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
@@ -31,13 +32,30 @@ export function NotificationBell() {
   // Only rows intersecting the scroll viewport have actually been viewed.
   useEffect(() => {
     const list = listRef.current;
-    if (!open || !list || typeof IntersectionObserver === 'undefined') return;
+    if (!open || !list) return;
+    const markVisible = (row: HTMLElement) => {
+      const id = row.dataset.unreadId;
+      if (!id || pendingRead.current.has(id)) return;
+      pendingRead.current.add(id);
+      void markRead(id).catch(() => {}).finally(() => pendingRead.current.delete(id));
+    };
+    if (typeof IntersectionObserver === 'undefined') {
+      const check = () => {
+        const bounds = list.getBoundingClientRect();
+        list.querySelectorAll<HTMLElement>('[data-unread-id]').forEach((row) => {
+          const rect = row.getBoundingClientRect();
+          const visible = Math.max(0, Math.min(rect.bottom, bounds.bottom) - Math.max(rect.top, bounds.top));
+          if (rect.height > 0 && visible / rect.height >= 0.5) markVisible(row);
+        });
+      };
+      list.addEventListener('scroll', check, { passive: true });
+      window.addEventListener('resize', check);
+      check();
+      return () => { list.removeEventListener('scroll', check); window.removeEventListener('resize', check); };
+    }
     const observer = new IntersectionObserver((entries) => {
       for (const entry of entries) {
-        const id = (entry.target as HTMLElement).dataset.unreadId;
-        if (!entry.isIntersecting || !id || pendingRead.current.has(id)) continue;
-        pendingRead.current.add(id);
-        void markRead(id).catch(() => {}).finally(() => pendingRead.current.delete(id));
+        if (entry.isIntersecting) markVisible(entry.target as HTMLElement);
       }
     }, { root: list, threshold: 0.5 });
     list.querySelectorAll('[data-unread-id]').forEach((row) => observer.observe(row));
@@ -105,7 +123,8 @@ export function NotificationBell() {
             </Button>
           </header>
 
-          {notifications.length === 0 ? (
+          {error ? <div className={styles.empty} role="alert">{error} <Button size="sm" variant="secondary" onClick={() => void reload()}>Retry</Button></div> : null}
+          {loading && notifications.length === 0 ? <p className={styles.empty}>Loading notifications…</p> : notifications.length === 0 ? (
             <p className={styles.empty}>No notifications yet.</p>
           ) : (
             <ul className={styles.list} ref={listRef}>
@@ -137,6 +156,13 @@ export function NotificationBell() {
               ))}
             </ul>
           )}
+          <footer className={styles.preferences}>
+            <span>Only viewed messages become read.</span>
+            <Button size="sm" variant="ghost" onClick={() => {
+              setOpen(false);
+              navigate(ROUTE_PATHS.admin, { state: { section: 'settings' } });
+            }}>Preferences</Button>
+          </footer>
         </div>
       ) : null}
     </div>

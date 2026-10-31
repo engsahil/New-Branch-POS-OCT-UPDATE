@@ -631,6 +631,7 @@ assert.equal(calculateTotals(configured, 0, false, 0).subtotal, 110000);
 assert.equal(splitCartLine(split, 'burger', 'another').length, 2);
 console.log('Split-line modifier pricing check passed.');
 const { receiptService } = require(path.join(root, 'src/services/receiptService.ts'));
+await db.put(STORES.toppings, { ...base('test-cheese'), name: 'Cheese', price: 10000, isActive: 1 });
 const splitCheckout = await orderService.complete({ lines: configured, paymentMethod: 'cash' });
 assert.equal(splitCheckout.order.subtotal, 110000);
 const savedLines = await orderService.getOrderItems(splitCheckout.order.id);

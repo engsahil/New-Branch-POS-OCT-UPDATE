@@ -113,6 +113,7 @@ const model = {
 const kitchen = {
   orderNumber: model.orderNumber,
   orderId: model.orderId,
+  status: model.status,
   date: model.date,
   time: model.time,
   orderType: model.orderType,

@@ -60,6 +60,8 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -87,9 +89,8 @@
   font-size: var(--fs-sm);
   font-weight: var(--fw-medium);
   color: var(--color-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .lineMeta {
@@ -100,6 +101,7 @@
 
 .lineControls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--sp-3);
 }
@@ -332,3 +334,24 @@
     height: 44px;
   }
 }
+
+.modifierActions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.modifierButton { min-height: 34px; padding: var(--sp-1) var(--sp-2); border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text-secondary); font-size: var(--fs-xs); }
+.modifierButton:hover, .modifierButton[aria-expanded='true'] { background: var(--color-selected); border-color: var(--color-primary); color: var(--color-primary); }
+.modifierPicker { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface-alt); }
+.modifierChoice { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-sm); cursor: pointer; }
+.modifierChoice span:first-of-type { flex: 1; overflow-wrap: anywhere; }
+.modifierChoice span:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.selectedModifiers { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.selectedModifiers button { padding: var(--sp-1) var(--sp-2); background: var(--color-accent-soft); color: var(--color-primary); border-radius: var(--radius-sm); font-size: var(--fs-xs); text-align: left; }
+.header, .footer { flex-shrink: 0; }
+.lines { flex: 1 0 0; }
+@media (max-width: 819px) {
+  .lines { flex: none; min-height: 100px; max-height: 38vh; }
+  /* Keep the essential totals/checkout block in reach while the long order
+     scrolls. The offset clears the fixed mobile navigation and safe area. */
+  .panel { overflow: visible; }
+  .header { position: sticky; top: 0; z-index: 2; background: var(--color-surface); }
+  .footer { position: sticky; bottom: calc(var(--layout-tabbar-h, 0px) + var(--safe-bottom, 0px)); z-index: 3; box-shadow: 0 -4px 12px rgb(0 0 0 / 6%); }
+}
+@media (pointer: coarse) { .modifierButton { min-height: 44px; } }

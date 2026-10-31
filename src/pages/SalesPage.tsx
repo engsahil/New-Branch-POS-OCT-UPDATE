@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/app/AuthContext';
 import { ROUTE_PATHS } from '@/app/routes';
@@ -22,6 +22,7 @@ import {
   type SalesReport,
 } from '@/services/salesService';
 import type { OrderRecord, SaleRecord } from '@/types/domain';
+import { compareOrderSequence, paginate } from '@/utils/pagination';
 import { formatMoney } from '@/utils/currency';
 import { downloadCsv, fileStamp } from '@/utils/csv';
 import { formatDateTime } from '@/utils/date';
@@ -61,15 +62,16 @@ export default function SalesPage() {
   const [reportLoading, setReportLoading] = useState(true);
 
   const loadReport = useCallback(async (next: DateRange) => {
+    const request = ++reportRequest.current;
     setReportLoading(true);
     setReportError(null);
     try {
       const result = await salesService.report(next);
-      setReport(result);
+      if (request === reportRequest.current) setReport(result);
     } catch {
-      setReportError('Could not build the report.');
+      if (request === reportRequest.current) setReportError('Could not build the report.');
     } finally {
-      setReportLoading(false);
+      if (request === reportRequest.current) setReportLoading(false);
     }
   }, []);
 
@@ -85,6 +87,9 @@ export default function SalesPage() {
   const [orderFrom, setOrderFrom] = useState('');
   const [orderTo, setOrderTo] = useState('');
   const [page, setPage] = useState(1);
+  const [direction, setDirection] = useState<'newest' | 'oldest'>('newest');
+  const listRef = useRef<HTMLUListElement>(null);
+  const reportRequest = useRef(0);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [openReceipt, setOpenReceipt] = useState<string | null>(null);
@@ -107,7 +112,8 @@ export default function SalesPage() {
     void loadHistory();
   }, [loadHistory]);
 
-  const term = query.trim().toLowerCase();
+  const deferredQuery = useDeferredValue(query);
+  const term = deferredQuery.trim().toLowerCase();
   const filteredHistory = useMemo(
     () =>
       history.filter(({ order }) => {
@@ -126,14 +132,23 @@ export default function SalesPage() {
     [history, orderFrom, orderTo, term],
   );
 
-  const pageCount = Math.max(1, Math.ceil(filteredHistory.length / PAGE_SIZE));
-  const currentPage = Math.min(page, pageCount);
-  const pageRows = filteredHistory.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
-  );
+  const sortedHistory = useMemo(() => [...filteredHistory].sort((a, b) =>
+    compareOrderSequence(a.order, b.order, direction)), [filteredHistory, direction]);
+  const pagination = paginate(sortedHistory, page, PAGE_SIZE);
+  const { pageRows, page: currentPage, pageCount } = pagination;
+  const invalidOrderRange = Boolean(orderFrom && orderTo && orderFrom > orderTo);
+
+  useEffect(() => { if (page !== currentPage) setPage(currentPage); }, [page, currentPage]);
+
+  function navigatePage(next: number) {
+    setPage(next);
+    // Reset only the list, not the page or filters. Reduced-motion users get
+    // an instant jump; refreshing/cancelling never calls this function.
+    listRef.current?.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  }
 
   async function handleCancel(orderId: string) {
+    if (busyId) return;
     setBusyId(orderId);
     setConfirmId(null);
     try {
@@ -142,8 +157,8 @@ export default function SalesPage() {
       notifySalesChanged();
       notifyInventoryChanged();
       notifyCustomersChanged();
-    } catch {
-      /* the row simply remains completed; the reason stays visible on screen */
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : 'The order could not be cancelled.');
     } finally {
       setBusyId(null);
     }
@@ -506,6 +521,12 @@ export default function SalesPage() {
               autoComplete="off"
               fullWidth
             />
+            <label className={styles.sortField}>Order by
+              <select value={direction} onChange={(event) => { setDirection(event.target.value as 'newest' | 'oldest'); setPage(1); }}>
+                <option value="newest">Newest created first</option>
+                <option value="oldest">Oldest created first</option>
+              </select>
+            </label>
             <div className={styles.customRange}>
               <Input
                 label="From"
@@ -536,8 +557,10 @@ export default function SalesPage() {
             </p>
           ) : null}
 
+          <p className={styles.definition}>Sorted by creation time, then record ID to break ties. Receipt corrections and cancellations do not move an order. Next/Previous advances exactly {PAGE_SIZE} records.</p>
+          {invalidOrderRange ? <p className={styles.error} role="alert">The start date must be on or before the end date.</p> : null}
           {historyLoading ? (
-            <p className={styles.loading}>Loading orders…</p>
+            <p className={styles.loading} role="status">Loading orders…</p>
           ) : pageRows.length === 0 ? (
             <EmptyState
               icon={<ReceiptIcon />}
@@ -545,7 +568,7 @@ export default function SalesPage() {
               description="Orders appear here as soon as a sale is completed."
             />
           ) : (
-            <ul className={styles.list}>
+            <ul className={styles.list} ref={listRef} tabIndex={0} aria-label="Scrollable orders list">
               {pageRows.map(({ order, sale }) => {
                 const cancelled = order.status === 'cancelled' || Boolean(sale?.cancelledAt);
                 const confirming = confirmId === order.id;
@@ -645,29 +668,13 @@ export default function SalesPage() {
             </ul>
           )}
 
-          {filteredHistory.length > PAGE_SIZE ? (
-            <div className={styles.pagination}>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={currentPage <= 1}
-                onClick={() => setPage(Math.max(1, currentPage - 1))}
-              >
-                Previous
-              </Button>
-              <span className={styles.pageLabel}>
-                Page {currentPage} of {pageCount} · {filteredHistory.length} orders
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={currentPage >= pageCount}
-                onClick={() => setPage(Math.min(pageCount, currentPage + 1))}
-              >
-                Next
-              </Button>
-            </div>
-          ) : null}
+          <div className={styles.pagination} aria-label="Order pagination">
+            <Button variant="ghost" size="sm" disabled={currentPage <= 1 || historyLoading} onClick={() => navigatePage(currentPage - 1)}>Previous</Button>
+            <span className={styles.pageLabel} aria-live="polite">
+              {pagination.first}–{pagination.last} of {pagination.total} orders · Page {currentPage} of {pageCount}
+            </span>
+            <Button variant="ghost" size="sm" disabled={currentPage >= pageCount || historyLoading} onClick={() => navigatePage(currentPage + 1)}>Next</Button>
+          </div>
         </div>
       )}
 

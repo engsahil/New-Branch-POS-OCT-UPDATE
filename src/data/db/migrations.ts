@@ -156,6 +156,14 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 9,
+    description: 'Operating expense ledger for v6.1.0. Additive; no existing records or indexes are changed.',
+    run: (ctx) => {
+      const schema = STORE_SCHEMAS.find((entry) => entry.name === 'expenses');
+      if (schema) ensureStore(ctx, schema);
+    },
+  },
 ];
 
 /** Apply every migration newer than the database's current version. */

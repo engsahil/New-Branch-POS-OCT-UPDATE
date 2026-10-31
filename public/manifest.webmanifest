@@ -91,7 +91,14 @@
           "type": "image/png"
         }
       ]
+    },
+    {
+      "name": "Expenses & Profit",
+      "short_name": "Expenses",
+      "description": "Operating expenses and estimated profit",
+      "url": "./expenses"
     }
   ],
-  "prefer_related_applications": false
+  "prefer_related_applications": false,
+  "version": "6.1.0"
 }

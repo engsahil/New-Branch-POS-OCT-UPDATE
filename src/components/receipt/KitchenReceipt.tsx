@@ -1,5 +1,5 @@
 import type { KitchenReceiptModel, ReceiptWidth } from '@/services/receiptService';
-import { receiptOrderTypeLabel } from '@/utils/receipt';
+import { receiptOrderTypeLabel, receiptStatusLabel } from '@/utils/receipt';
 import styles from './Receipt.module.css';
 
 export interface KitchenReceiptProps {
@@ -20,6 +20,7 @@ export function KitchenReceipt({ model, width }: KitchenReceiptProps) {
         <h1 className={styles.kitchenTitle}>KITCHEN</h1>
       </header>
 
+      {receiptStatusLabel(model.status) ? <p className={styles.voidBanner} role="status">{receiptStatusLabel(model.status)}</p> : null}
       <div className={styles.rule} />
 
       <dl className={styles.meta}>
@@ -61,14 +62,14 @@ export function KitchenReceipt({ model, width }: KitchenReceiptProps) {
             {line.toppings.length > 0 ? (
               <ul className={styles.kitchenModifiers}>
                 {line.toppings.map((topping, index) => (
-                  <li key={`topping-${index}`}>Topping: {topping.name}</li>
+                  <li key={`topping-${index}`}>Topping: {topping.name} x{line.quantity}</li>
                 ))}
               </ul>
             ) : null}
             {line.addOns.length > 0 ? (
               <ul className={styles.kitchenModifiers}>
                 {line.addOns.map((addOn, index) => (
-                  <li key={`addon-${index}`}>Add-on: {addOn.name}</li>
+                  <li key={`addon-${index}`}>Add-on: {addOn.name} x{line.quantity}</li>
                 ))}
               </ul>
             ) : null}

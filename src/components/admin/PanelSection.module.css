@@ -440,3 +440,8 @@
   border: 1px solid var(--color-border);
   background-color: var(--color-surface-muted);
 }
+
+.scope { border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--sp-3); min-width: 0; }
+.scope legend { padding-inline: var(--sp-2); font-size: var(--fs-sm); font-weight: var(--fw-semibold); }
+.scopeOptions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--sp-2); max-height: 180px; overflow-y: auto; margin-block: var(--sp-3); }
+.scopeOptions label { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }

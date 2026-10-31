@@ -49,6 +49,8 @@ export function OrderReceiptDialog({
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [refunding, setRefunding] = useState(false);
+  const [refundReason, setRefundReason] = useState('');
 
   const load = useCallback(async () => {
     setError(null);
@@ -126,6 +128,18 @@ export function OrderReceiptDialog({
     }
   }
 
+  async function refundOrder() {
+    if (saving) return;
+    setSaving(true); setError(null);
+    try {
+      await orderService.refund(orderId, refundReason);
+      await load(); setRefunding(false); setRefundReason('');
+      setNotice('Full refund recorded. The sale is excluded from revenue and stock was restored.');
+      onEdited?.();
+    } catch (err) { setError(err instanceof Error ? err.message : 'The refund could not be recorded.'); }
+    finally { setSaving(false); }
+  }
+
   // Portal to <body>: pages animate a transform on entry (.page), which
   // makes them a containing block + stacking context. Rendered in place,
   // this fixed overlay was positioned against the page (not the viewport)
@@ -158,11 +172,13 @@ export function OrderReceiptDialog({
               variant="secondary"
               size="sm"
               leadingIcon={<EditIcon width={15} height={15} />}
-              onClick={() => setEditing((value) => !value)}
+              disabled={model?.status !== 'completed'}
+              onClick={() => { setEditing((value) => !value); setRefunding(false); }}
               aria-pressed={editing}
             >
               {editing ? 'Cancel edit' : 'Edit receipt'}
             </Button>
+            {model?.status === 'completed' ? <Button variant="danger" size="sm" disabled={saving} onClick={() => { setRefunding((value) => !value); setEditing(false); }}>{refunding ? 'Keep order' : 'Full refund'}</Button> : null}
             <Button variant="ghost" size="sm" onClick={onClose}>
               Close
             </Button>
@@ -179,6 +195,13 @@ export function OrderReceiptDialog({
             {notice}
           </p>
         ) : null}
+
+        {refunding ? <section className={styles.editor} aria-label="Confirm full refund">
+          <h3 className={styles.editorTitle}>Refund the full amount?</h3>
+          <p className={styles.editorHint}>This marks the entire sale refunded and restores its recorded stock once. Record the actual money return in your payment till/terminal; this app does not send money. Partial refunds are not supported.</p>
+          <Input label="Refund reason" name="refundReason" value={refundReason} onChange={(event) => setRefundReason(event.target.value)} minLength={4} maxLength={200} required fullWidth />
+          <Button variant="danger" disabled={saving || refundReason.trim().length < 4} onClick={() => void refundOrder()}>{saving ? 'Recording…' : 'Confirm full refund'}</Button>
+        </section> : null}
 
         {editing ? (
           <section className={styles.editor} aria-label="Edit receipt">

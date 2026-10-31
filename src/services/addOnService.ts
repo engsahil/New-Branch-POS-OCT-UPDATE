@@ -1,12 +1,23 @@
 import { addOnsRepository } from '@/data/repositories';
 import type { AddOnRecord } from '@/types/domain';
-import type { Paisa } from '@/types/common';
-import { sanitisePrice, sanitiseText } from '@/utils/validate';
+import type { ID, Paisa } from '@/types/common';
+import { assertText, sanitisePrice } from '@/utils/validate';
 
 export interface AddOnInput {
   name: string;
   price: Paisa;
   isActive: boolean;
+  costPrice?: Paisa | null;
+  menuItemIds?: ID[];
+}
+
+async function validateName(value: string, excludeId?: string): Promise<string> {
+  const name = assertText(value, 'Add-on name', { max: 80 });
+  const rows = await addOnsRepository.list();
+  if (rows.some((row) => row.id !== excludeId && row.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase())) {
+    throw new Error('A add-on with this name already exists. Use a distinct name.');
+  }
+  return name;
 }
 
 export const addOnService = {
@@ -22,17 +33,21 @@ export const addOnService = {
 
   async create(input: AddOnInput): Promise<AddOnRecord> {
     return addOnsRepository.create({
-      name: sanitiseText(input.name, 80),
+      name: await validateName(input.name),
       price: sanitisePrice(input.price) ?? 0,
       isActive: input.isActive ? 1 : 0,
+      costPrice: input.costPrice == null ? null : sanitisePrice(input.costPrice),
+      menuItemIds: [...new Set(input.menuItemIds ?? [])],
     });
   },
 
   async update(id: string, input: AddOnInput): Promise<AddOnRecord> {
     return addOnsRepository.update(id, {
-      name: sanitiseText(input.name, 80),
+      name: await validateName(input.name, id),
       price: sanitisePrice(input.price) ?? 0,
       isActive: input.isActive ? 1 : 0,
+      costPrice: input.costPrice == null ? null : sanitisePrice(input.costPrice),
+      menuItemIds: [...new Set(input.menuItemIds ?? [])],
     });
   },
 

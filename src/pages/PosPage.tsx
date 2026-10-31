@@ -164,8 +164,8 @@ export default function PosPage() {
       notifyInventoryChanged();
       notifySalesChanged();
       notifyCustomersChanged();
-    } catch {
-      setError('Could not complete the order. Please try again.');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Could not complete the order. Please try again.');
     } finally {
       setCompleting(false);
     }
@@ -342,6 +342,7 @@ export default function PosPage() {
                         dealId: view.record.id,
                         name: view.record.name,
                         unitPrice: view.dealPrice,
+                version: `${view.record.updatedAt}:${view.record.rev ?? 1}`,
                       })
                     }
                   />

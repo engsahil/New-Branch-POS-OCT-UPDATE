@@ -49,6 +49,10 @@ export const TOUR_STEPS = [
     body: 'Stock levels, low-stock alerts and menu links. Linked items that run out are hidden from the POS.',
   },
   {
+    target: 'nav-expenses', title: 'Expenses & Profit',
+    body: 'Record operating costs, compare periods and review estimated profit. Missing product costs are disclosed, never treated as zero.',
+  },
+  {
     target: 'nav-admin',
     title: 'Settings',
     body: 'Restaurant profile and banner, appearance, printer and receipt settings, security and back-ups live here.',

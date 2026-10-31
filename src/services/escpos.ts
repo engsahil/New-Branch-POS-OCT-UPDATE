@@ -8,7 +8,7 @@
  */
 
 import type { KitchenReceiptModel, ReceiptModel, ReceiptWidth } from './receiptService';
-import { receiptOrderTypeLabel } from '@/utils/receipt';
+import { receiptOrderTypeLabel, receiptModifierLabel, receiptStatusLabel } from '@/utils/receipt';
 import { formatMoney } from '@/utils/currency';
 import { formatPaymentMethod } from '@/utils/payment';
 
@@ -184,8 +184,9 @@ function pairLines(label: string, value: string, width: number): string[] {
 function customerTextLines(model: ReceiptModel, width: number): string[] {
   const columns = itemColumns(width, model);
   const out: string[] = [];
+  const status = receiptStatusLabel(model.status);
+  if (status) out.push(...wrapText(status, width));
   const divider = '-'.repeat(width);
-  const money = (value: number) => formatMoney(value, { withSymbol: false });
 
   if (model.header.logo?.dataUrl.startsWith('data:image/')) {
     out.push(centre('[LOGO IMAGE]', width));
@@ -236,12 +237,12 @@ function customerTextLines(model: ReceiptModel, width: number): string[] {
     out.push(...itemRowLines(label, item.quantity, item.unitPrice, item.lineTotal, columns));
 
     for (const topping of item.toppings) {
-      for (const line of wrapText(`  + ${topping.name}${topping.price ? ` (${money(topping.price)})` : ''}`, width)) {
+      for (const line of wrapText(`  + ${receiptModifierLabel(topping, item.quantity)}`, width)) {
         out.push(line);
       }
     }
     for (const addOn of item.addOns) {
-      for (const line of wrapText(`  + ${addOn.name}${addOn.price ? ` (${money(addOn.price)})` : ''}`, width)) {
+      for (const line of wrapText(`  + ${receiptModifierLabel(addOn, item.quantity)}`, width)) {
         out.push(line);
       }
     }
@@ -267,7 +268,7 @@ function customerTextLines(model: ReceiptModel, width: number): string[] {
   }
   out.push(divider);
   out.push(`TOTAL ${formatMoney(model.grandTotal)}`);
-  if (model.amountPaid != null) {
+  if (model.status === 'completed' && model.amountPaid != null) {
     out.push(...pairLines('Payment method', formatPaymentMethod(model.paymentMethod), width));
     out.push(...pairLines('Paid', formatMoney(model.amountPaid), width));
   }
@@ -296,6 +297,8 @@ export function renderPlainText(model: ReceiptModel, width: ReceiptWidth): strin
 
 function kitchenTextLines(model: KitchenReceiptModel, width: number): string[] {
   const out: string[] = [centre('KITCHEN', width), '-'.repeat(width)];
+  const status = receiptStatusLabel(model.status);
+  if (status) out.push(...wrapText(status, width));
   out.push(...pairLines('Order', `#${model.orderNumber}`, width));
   out.push(...pairLines('Type', receiptOrderTypeLabel(model.orderType), width));
   if (model.tableLabel) out.push(...pairLines('Table', model.tableLabel, width));
@@ -309,10 +312,10 @@ function kitchenTextLines(model: KitchenReceiptModel, width: number): string[] {
     out.push(`${prefix}${labelLines[0] ?? ''}`);
     for (const line of labelLines.slice(1)) out.push(`  ${line}`);
     for (const topping of item.toppings) {
-      for (const line of wrapText(`  Topping: ${topping.name}`, width)) out.push(line);
+      for (const line of wrapText(`  Topping: ${topping.name} x${item.quantity}`, width)) out.push(line);
     }
     for (const addOn of item.addOns) {
-      for (const line of wrapText(`  Add-on: ${addOn.name}`, width)) out.push(line);
+      for (const line of wrapText(`  Add-on: ${addOn.name} x${item.quantity}`, width)) out.push(line);
     }
     for (const content of item.dealContents) {
       for (const line of wrapText(`  - ${content}`, width)) out.push(line);
@@ -464,6 +467,8 @@ function encodeCustomer(
   }
 
   push(CMD.ALIGN_LEFT);
+  const status = receiptStatusLabel(model.status);
+  if (status) wrapText(status, cols).forEach(line);
   line('-'.repeat(cols));
   const metadata: [string, string][] = [
     ['Order', `#${model.orderNumber}`],
@@ -509,14 +514,14 @@ function encodeCustomer(
 
     for (const topping of item.toppings) {
       const wrapped = wrapText(
-        `  + ${topping.name}${topping.price ? ` (${formatMoney(topping.price, { withSymbol: false })})` : ''}`,
+        `  + ${receiptModifierLabel(topping, item.quantity)}`,
         cols,
       );
       wrapped.forEach(line);
     }
     for (const addOn of item.addOns) {
       const wrapped = wrapText(
-        `  + ${addOn.name}${addOn.price ? ` (${formatMoney(addOn.price, { withSymbol: false })})` : ''}`,
+        `  + ${receiptModifierLabel(addOn, item.quantity)}`,
         cols,
       );
       wrapped.forEach(line);
@@ -564,7 +569,7 @@ function encodeCustomer(
   }
   push(CMD.SIZE_NORMAL, CMD.BOLD_OFF);
 
-  if (model.amountPaid != null) {
+  if (model.status === 'completed' && model.amountPaid != null) {
     const methodLines = pairLines('Payment method', formatPaymentMethod(model.paymentMethod), cols);
     methodLines.forEach(line);
     const paidLines = pairLines('Paid', formatMoney(model.amountPaid), cols);

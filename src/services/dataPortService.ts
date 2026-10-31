@@ -19,6 +19,7 @@ import {
 } from '@/config/storage.config';
 import { SYNC_API_URL } from '@/config/sync.config';
 import { db } from '@/data/db/indexedDb';
+import { notificationService } from './notificationService';
 import {
   createDataPortService,
   type DataPortDatabase,
@@ -41,7 +42,10 @@ const EXCLUDED_STORES: Record<string, string> = {
 const backupStores = ALL_STORES.filter(
   (name) => !Object.prototype.hasOwnProperty.call(EXCLUDED_STORES, name),
 );
-const legacyBackupStores = ALL_STORES.filter((name) => name !== STORES.syncQueue);
+const legacyBackupStores = [
+  'admin', 'restaurant', 'menuItems', 'itemPrices', 'inventory', 'deals',
+  'orders', 'orderItems', 'sales', 'customers', 'toppings', 'addOns', 'settings',
+];
 
 /** Unique indexes are derived from the real IndexedDB schema, not guessed. */
 const uniqueIndexes = Object.fromEntries(
@@ -128,12 +132,8 @@ const portableData = createDataPortService(
     databaseName: DB_NAME,
     databaseVersion: DB_VERSION,
     allStores: [...ALL_STORES],
-  optionalStores: [
-    STORES.notifications,
-    STORES.receiptAudits,
-    // Added after 5.1.9; a backup made before it must still restore.
-    STORES.purchases,
-  ],
+    optionalStores: [STORES.notifications, STORES.receiptAudits, STORES.purchases, STORES.expenses],
+    storeIntroducedAt: { notifications: 7, receiptAudits: 7, purchases: 8, expenses: 9 },
     backupStores: [...backupStores],
     legacyBackupStores: [...legacyBackupStores],
     excludedStores: EXCLUDED_STORES,
@@ -181,6 +181,10 @@ export const dataPortService = {
   async importBackup(input: unknown): Promise<ImportResult> {
     if (!db.isSupported()) throw new Error('IndexedDB is not available in this browser.');
     await assertLiveSchema();
-    return portableData.importBackup(input);
+    const result = await portableData.importBackup(input);
+    await notificationService.create({ key: `backup:${new Date().toISOString()}:${result.added}:${result.updated}`,
+      kind: 'system', title: 'Business backup imported',
+      body: `${result.added} added · ${result.updated} updated · ${result.skipped} skipped. Local sign-in was preserved.`, link: '/admin' });
+    return result;
   },
 };
