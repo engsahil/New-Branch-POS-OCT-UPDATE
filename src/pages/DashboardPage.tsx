@@ -5,6 +5,8 @@ import { ROUTE_PATHS } from '@/app/routes';
 import { CHART_COLORS, DonutChart, TrendChart } from '@/components/charts/Charts';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { OrderReceiptDialog } from '@/components/receipt/OrderReceiptDialog';
+import { FinanceTrend } from '@/components/charts/FinanceTrend';
+import { financeService, type FinanceReport } from '@/services/financeService';
 import { Button, EmptyState } from '@/components/ui';
 import {
   CustomersIcon,
@@ -56,6 +58,7 @@ interface DashboardData {
   profile: RestaurantRecord | undefined;
   overview: SalesOverview;
   report: SalesReport;
+  finance: FinanceReport;
   payment: ReportBucket[];
   orderTypes: ReportBucket[];
   bestSellers: { name: string; quantity: number; amount: number }[];
@@ -123,11 +126,12 @@ export default function DashboardPage() {
         from.setDate(from.getDate() - (days - 1));
         const window = { from: dateKey(from), to: today };
 
-        const [profile, overview, report, recent, stock, customers, stats] =
+        const [profile, overview, report, finance, recent, stock, customers, stats] =
           await Promise.all([
             restaurantService.getRecord(),
             salesService.overview(),
             salesService.report(window),
+            financeService.report(window),
             orderService.recentOrders(6),
             inventoryService.list(),
             customerService.list(),
@@ -149,6 +153,7 @@ export default function DashboardPage() {
           profile,
           overview,
           report,
+          finance,
           payment: report.byPayment,
           orderTypes: report.byOrderType,
           bestSellers: report.topProducts.slice(0, 5),
@@ -235,6 +240,7 @@ export default function DashboardPage() {
       path: ROUTE_PATHS.customers,
       icon: CustomersIcon,
     },
+    { label: 'Expenses', hint: 'Profit', path: ROUTE_PATHS.expenses, icon: ReportsIcon },
     { label: 'Menu', hint: 'Items', path: ROUTE_PATHS.menu, icon: MenuBookIcon },
     { label: 'Deals', hint: 'Offers', path: ROUTE_PATHS.deals, icon: TagIcon },
     {
@@ -450,6 +456,19 @@ export default function DashboardPage() {
           </dl>
         </section>
       ) : null}
+
+      {display.dashboard.finance ? <section className={styles.card} aria-label="Financial performance">
+        <div className={styles.cardHead}><div><h3 className={styles.cardTitle}>Sales, expenses & profit</h3><p className={styles.cardMeta}>{data.finance.from} to {data.finance.to} · tax-exclusive revenue</p></div>
+          <button className={styles.linkButton} onClick={() => navigate(ROUTE_PATHS.expenses)}>Manage expenses</button></div>
+        <dl className={styles.totals}>
+          <div><dt>Sales revenue</dt><dd>{formatMoney(data.finance.revenue)}</dd></div>
+          <div><dt>Operating expenses</dt><dd>{formatMoney(data.finance.operatingExpenses)}</dd></div>
+          <div><dt>Cost of goods sold</dt><dd>{data.finance.cogs === null ? 'Unavailable' : formatMoney(data.finance.cogs)}</dd></div>
+          <div><dt>Estimated operating profit</dt><dd>{data.finance.operatingProfit === null ? 'Unavailable' : formatMoney(data.finance.operatingProfit)}</dd></div>
+        </dl>
+        <p className={styles.cardMeta}>{data.finance.missingCostUnits > 0 ? `${data.finance.missingCostUnits} sold units lack complete cost snapshots (${Math.round(data.finance.costCoverage * 100)}% coverage). Profit is unavailable, not zero.` : 'Profit = sales excluding tax − saved product/modifier costs − operating expenses. Stock purchases are not counted again.'}</p>
+        <FinanceTrend rows={data.finance.byDay} />
+      </section> : null}
 
       <div className={styles.columns}>
         {display.dashboard.trends ? (

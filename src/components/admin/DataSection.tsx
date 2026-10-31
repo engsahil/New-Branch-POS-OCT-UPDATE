@@ -24,6 +24,7 @@ export function DataSection() {
   const [source, setSource] = useState<StorageSource | null>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [acknowledged, setAcknowledged] = useState(false);
   const [pending, setPending] = useState<PendingImport | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -77,6 +78,7 @@ export function DataSection() {
     try {
       const input: unknown = JSON.parse(await file.text());
       const preview = dataPortService.previewBackup(input);
+      setAcknowledged(false);
       setPending({ fileName: file.name, input, preview });
     } catch (error) {
       setFailure(
@@ -90,7 +92,7 @@ export function DataSection() {
   }
 
   async function confirmImport() {
-    if (!pending) return;
+    if (!pending || !acknowledged) return;
     setImporting(true);
     setFailure(null);
     setResult(null);
@@ -265,9 +267,14 @@ export function DataSection() {
               </div>
               <div className={styles.row}>
                 <dt className={styles.rowLabel}>Source address</dt>
-                <dd className={styles.rowValue}>{pending.preview.sourceOrigin}</dd>
+                <dd className={styles.rowValue}>{pending.preview.sourceOrigin}{pending.preview.crossOrigin ? ' · Different address: records will be merged into this terminal.' : ' · This address'}</dd>
               </div>
             </dl>
+            <p className={styles.hint}>
+              {pending.preview.integrityVerified === true ? 'Checksum and record relationships verified.' : pending.preview.integrityVerified === null ? 'Older backup: structure and relationships verified; no checksum was supplied.' : 'Checksum validation failed.'}
+              {pending.preview.coverage ? ` Sales coverage: ${pending.preview.coverage.salesRecords} records, ${pending.preview.coverage.earliestBusinessDate ?? 'no sales'} through ${pending.preview.coverage.latestBusinessDate ?? 'no sales'}.` : ''}
+              {pending.preview.missingStores.length ? ` Stores not present in this older file (left unchanged here): ${pending.preview.missingStores.join(', ')}.` : ' All current business stores are present.'}
+            </p>
             <p className={styles.confirmText}><strong>Records in this file:</strong></p>
             <dl className={styles.details}>
               {Object.entries(pending.preview.storeCounts).map(([store, count]) => (
@@ -295,6 +302,10 @@ export function DataSection() {
               newer timestamp. Duplicate/older records are skipped. A unique
               order-number conflict stops the whole import before any writes.
             </p>
+            <label className={styles.toggleRow}>
+              <input type="checkbox" checked={acknowledged} disabled={importing} onChange={(event) => setAcknowledged(event.target.checked)} />
+              <span>I have a current backup and understand that matching records may be updated by this merge. No existing records will be cleared; this is not a destructive replacement.</span>
+            </label>
             <div className={styles.actions}>
               <Button
                 variant="ghost"
@@ -303,7 +314,7 @@ export function DataSection() {
               >
                 Cancel
               </Button>
-              <Button disabled={importing} onClick={() => void confirmImport()}>
+              <Button disabled={importing || !acknowledged} onClick={() => void confirmImport()}>
                 {importing ? 'Importing…' : 'Import and merge data'}
               </Button>
             </div>

@@ -312,6 +312,9 @@ export interface OrderRecord extends BaseEntity {
   taxTotal: Paisa;
   /** Final payable amount. */
   grandTotal: Paisa;
+  /** Checkout tax configuration; absent on historical orders. */
+  taxPercent?: number;
+  taxInclusive?: boolean;
   paymentMethod?: PaymentMethod | null;
   amountPaid?: Paisa;
   changeDue?: Paisa;
@@ -348,11 +351,16 @@ export interface OrderRecord extends BaseEntity {
 }
 
 export interface SelectedTopping {
+  costPrice?: Paisa | null;
+  /** Optional for receipts saved before stable modifier IDs were captured. */
+  modifierId?: ID;
   name: string;
   price: Paisa;
 }
 
 export interface SelectedAddOn {
+  costPrice?: Paisa | null;
+  modifierId?: ID;
   name: string;
   price: Paisa;
 }
@@ -366,6 +374,10 @@ export interface OrderItemRecord extends BaseEntity {
   name: string;
   sizeLabel?: string;
   unitPrice: Paisa;
+  /** Complete known portion cost incl. modifiers; null/absent = unavailable. */
+  unitCost?: Paisa | null;
+  /** Total bundle saving at checkout, not a later recomputation at menu prices. */
+  dealSavings?: Paisa;
   quantity: number;
   discount: Paisa;
   /** unitPrice * quantity - discount + toppings/add-ons */
@@ -380,12 +392,17 @@ export interface OrderItemRecord extends BaseEntity {
 export interface ToppingRecord extends BaseEntity {
   name: string;
   price: Paisa;
+  costPrice?: Paisa | null;
+  /** Absent/empty preserves the legacy all-products behaviour. */
+  menuItemIds?: ID[];
   isActive: 0 | 1;
 }
 
 export interface AddOnRecord extends BaseEntity {
   name: string;
   price: Paisa;
+  costPrice?: Paisa | null;
+  menuItemIds?: ID[];
   isActive: 0 | 1;
 }
 
@@ -403,6 +420,8 @@ export interface SaleRecord extends BaseEntity {
   discountTotal: Paisa;
   taxTotal: Paisa;
   grandTotal: Paisa;
+  taxPercent?: number;
+  taxInclusive?: boolean;
   paymentMethod: PaymentMethod;
   itemCount: number;
   /**
@@ -451,6 +470,19 @@ export interface PurchaseRecord extends BaseEntity {
   receivedAt: ISODateString;
   /** Quantity on hand after this receipt, for a readable history. */
   quantityAfter: number;
+}
+
+/** Operating expense. Money is integer paisa; expenseDate is a local calendar day. */
+export interface ExpenseRecord extends BaseEntity {
+  title: string;
+  description: string;
+  category: string;
+  amount: Paisa;
+  expenseDate: ISODateString;
+  paymentMethod: PaymentMethod;
+  payee: string;
+  reference: string;
+  notes: string;
 }
 
 /* ------------------------------------------------------------------ */

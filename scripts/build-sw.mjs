@@ -74,10 +74,12 @@ const revision = Buffer.from(stats.join('|'))
   .replace(/[^a-zA-Z0-9]/g, '')
   .slice(0, 16);
 
+const appVersion = JSON.parse(await readFile(resolve('package.json'), 'utf8')).version;
 const template = await readFile(swSource, 'utf8');
 const output = template
   .replace('__PRECACHE_MANIFEST__', JSON.stringify(assets, null, 2))
-  .replace('__BUILD_REVISION__', JSON.stringify(revision));
+  .replace('__BUILD_REVISION__', JSON.stringify(revision))
+  .replace('__APP_VERSION__', JSON.stringify(appVersion));
 
 await writeFile(swOutput, output, 'utf8');
 

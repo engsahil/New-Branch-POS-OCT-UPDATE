@@ -45,6 +45,8 @@ export interface DataPortConfiguration {
    * missing stores as empty and never fails for that reason.
    */
   optionalStores?: string[];
+  /** Database version that introduced each optional store. */
+  storeIntroducedAt?: Record<string, number>;
   /** Explicitly disclosed security/transport exclusions. */
   excludedStores: Record<string, string>;
   orderSequenceSettingId: string;
@@ -61,6 +63,19 @@ export interface BackupPreview {
   storeCounts: Record<string, number>;
   excludedStores: Record<string, string>;
   excludedCredentialRecords: number;
+  crossOrigin: boolean;
+  missingStores: string[];
+  integrityVerified: boolean | null;
+  coverage: BackupCoverage | null;
+}
+
+export interface BackupCoverage {
+  complete: boolean;
+  salesRecords: number;
+  earliestBusinessDate: string | null;
+  latestBusinessDate: string | null;
+  earliestCompletedAt: string | null;
+  latestCompletedAt: string | null;
 }
 
 export interface StoreImportTally {
@@ -87,6 +102,9 @@ interface NormalisedBackup {
   stores: Record<string, DataPortRecord[]>;
   excludedStores: Record<string, string>;
   excludedCredentialRecords: number;
+  missingStores: string[];
+  integrityVerified: boolean | null;
+  coverage: BackupCoverage | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -99,6 +117,32 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function hasOwn(value: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (isRecord(value)) return `{${Object.keys(value).sort().filter((key) => value[key] !== undefined).map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
+  return JSON.stringify(value);
+}
+
+/** CRC32 (IEEE), used only as a portable corruption check, never as a signature. */
+export function backupChecksum(value: unknown): string {
+  const text = canonicalJson(value);
+  let crc = 0xffffffff;
+  for (let index = 0; index < text.length; index += 1) {
+    crc ^= text.charCodeAt(index);
+    for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+  }
+  return ((crc ^ 0xffffffff) >>> 0).toString(16).padStart(8, '0');
+}
+
+function salesCoverage(rows: DataPortRecord[]): BackupCoverage {
+  const active = rows.filter((row) => !row.deletedAt);
+  const dates = active.map((row) => row.businessDate).filter((value): value is string => typeof value === 'string').sort();
+  const times = active.map((row) => row.completedAt ?? row.createdAt).filter((value): value is string => typeof value === 'string' && Number.isFinite(Date.parse(value))).sort((a, b) => Date.parse(a) - Date.parse(b));
+  return { complete: true, salesRecords: rows.length,
+    earliestBusinessDate: dates[0] ?? null, latestBusinessDate: dates[dates.length - 1] ?? null,
+    earliestCompletedAt: times[0] ?? null, latestCompletedAt: times[times.length - 1] ?? null };
 }
 
 function isValidTimestamp(value: unknown): value is string {
@@ -175,8 +219,27 @@ function assertRecordShape(store: string, input: unknown): DataPortRecord {
   if (store === 'orderItems' && (typeof input.orderId !== 'string' || !input.orderId)) {
     throw new Error('An order item is missing its parent order id.');
   }
-  if (store === 'sales' && (typeof input.orderId !== 'string' || !input.orderId)) {
-    throw new Error('A sale record is missing its parent order id.');
+  if (store === 'sales') {
+    if (typeof input.orderId !== 'string' || !input.orderId) throw new Error('A sale record is missing its parent order id.');
+    if (typeof input.businessDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(input.businessDate) || !isValidTimestamp(input.businessDate)) {
+      throw new Error('A sale record has an invalid business date.');
+    }
+    if (!isValidTimestamp(input.completedAt)) throw new Error('A sale record has an invalid completion timestamp.');
+    for (const field of ['subtotal', 'grandTotal', 'taxTotal', 'discountTotal', 'itemCount']) {
+      if (input[field] !== undefined && (!finiteNumber(input[field]) || (input[field] as number) < 0)) throw new Error(`A sale record has an invalid ${field}.`);
+    }
+  }
+  if (store === 'expenses') {
+    if (typeof input.title !== 'string' || !input.title.trim() || typeof input.category !== 'string' || !input.category.trim() ||
+        !finiteNumber(input.amount) || !Number.isSafeInteger(input.amount) || (input.amount as number) <= 0 ||
+        typeof input.expenseDate !== 'string' || !isValidTimestamp(input.expenseDate) ||
+        !['cash', 'card', 'digital', 'other'].includes(String(input.paymentMethod))) {
+      throw new Error('An expense has an invalid title, category, amount, date or payment method.');
+    }
+  }
+  if (store === 'purchases' && (input.quantity !== undefined && !finiteNumber(input.quantity) ||
+      input.unitCost !== undefined && input.unitCost !== null && (!finiteNumber(input.unitCost) || (input.unitCost as number) < 0))) {
+    throw new Error('A purchase has an invalid quantity or cost.');
   }
   if (
     store === 'itemPrices' &&
@@ -290,12 +353,10 @@ function parseAndValidate(
         'This backup uses an unsupported POS data schema. Update the POS before importing it. No data was changed.',
       );
     }
-    requireStoreManifest(
-      input.schema.stores,
-      config.backupStores,
-      'store',
-      config.optionalStores,
-    );
+    const sourceVersion = input.source.databaseVersion as number;
+    const missingAllowed = (config.optionalStores ?? []).filter((name) =>
+      sourceVersion < (config.storeIntroducedAt?.[name] ?? config.databaseVersion));
+    requireStoreManifest(input.schema.stores, config.backupStores, 'store', missingAllowed);
     const suppliedExcludedStores = input.excludedStores;
     if (!isRecord(suppliedExcludedStores)) {
       throw new Error('The backup exclusion manifest is missing or invalid.');
@@ -314,7 +375,9 @@ function parseAndValidate(
   }
 
   const keys = Object.keys(input.stores);
-  requireStoreManifest(keys, sourceStoreNames, 'data', isLegacy ? [] : config.optionalStores);
+  const allowedMissing = isLegacy ? [] : (config.optionalStores ?? []).filter((name) =>
+    ((input.source as Record<string, unknown>).databaseVersion as number) < (config.storeIntroducedAt?.[name] ?? config.databaseVersion));
+  requireStoreManifest(keys, sourceStoreNames, 'data', allowedMissing);
 
   const stores: Record<string, DataPortRecord[]> = {};
   let excludedCredentialRecords = 0;
@@ -368,6 +431,25 @@ function parseAndValidate(
     }
   }
 
+  let integrityVerified: boolean | null = null;
+  if (hasOwn(input, 'integrity')) {
+    if (!isRecord(input.integrity) || input.integrity.algorithm !== 'crc32-canonical-json-v1' ||
+        typeof input.integrity.checksum !== 'string') throw new Error('Backup integrity metadata is invalid.');
+    integrityVerified = input.integrity.checksum === backupChecksum(stores);
+    if (!integrityVerified) throw new Error('Backup checksum does not match its records. The file is damaged or was modified. No data was changed.');
+  }
+  const coverage = hasOwn(input, 'coverage') ? input.coverage : null;
+  if (hasOwn(input, 'coverage') && coverage !== null) {
+    if (!isRecord(coverage)) throw new Error('Backup coverage metadata is invalid.');
+    const expected = salesCoverage(stores.sales ?? []);
+    // Legacy files may legitimately contain no sales array.
+    if (!hasOwn(input.stores, 'sales')) expected.salesRecords = 0;
+    if (Object.entries(expected).some(([key, value]) => coverage[key] !== value)) {
+      throw new Error('Backup sales coverage does not match its records. No data was changed.');
+    }
+  }
+  assertRelationships(stores);
+  const missingStores = config.backupStores.filter((name) => !hasOwn(stores, name));
   return {
     exportedAt: input.exportedAt,
     sourceOrigin: input.source.origin,
@@ -375,8 +457,38 @@ function parseAndValidate(
     legacy: isLegacy,
     stores,
     excludedStores,
-    excludedCredentialRecords,
+    excludedCredentialRecords, missingStores, integrityVerified,
+    coverage: coverage as BackupCoverage | null,
   };
+}
+
+/** Immutable relationships must survive both the file and the proposed merge. */
+function assertRelationships(stores: Record<string, DataPortRecord[]>): void {
+  const ids = (name: string) => new Set((stores[name] ?? []).map((row) => row.id));
+  const links: [string, string, string][] = [
+    ['orderItems', 'orderId', 'orders'], ['sales', 'orderId', 'orders'],
+    ['itemPrices', 'menuItemId', 'menuItems'], ['receiptAudits', 'orderId', 'orders'],
+    ['receiptAudits', 'itemId', 'orderItems'],
+  ];
+  for (const [store, field, parent] of links) {
+    if (!hasOwn(stores, store) || !hasOwn(stores, parent)) continue;
+    const parents = ids(parent);
+    for (const row of stores[store] ?? []) {
+      if (!parents.has(String(row[field]))) throw new Error(`Backup relationship is broken: ${store} ${row.id} references missing ${parent} ${String(row[field])}. No data was changed.`);
+    }
+  }
+  if (stores.sales && stores.orders) {
+    const orders = new Map(stores.orders.map((row) => [row.id, row]));
+    for (const sale of stores.sales) {
+      const order = orders.get(String(sale.orderId))!;
+      if (typeof order.grandTotal === 'number' && typeof sale.grandTotal === 'number' && order.grandTotal !== sale.grandTotal) {
+        throw new Error(`Backup sale ${sale.id} disagrees with its order total. No data was changed.`);
+      }
+      if (typeof order.orderNumber === 'string' && typeof sale.orderNumber === 'string' && order.orderNumber !== sale.orderNumber) {
+        throw new Error(`Backup sale ${sale.id} disagrees with its order number. No data was changed.`);
+      }
+    }
+  }
 }
 
 function asRecord(record: DataPortRecord): Record<string, unknown> {
@@ -512,6 +624,8 @@ export function createDataPortService(
       storeCounts,
       excludedStores: { ...backup.excludedStores },
       excludedCredentialRecords: backup.excludedCredentialRecords,
+      crossOrigin: backup.sourceOrigin !== getOrigin(), missingStores: backup.missingStores,
+      integrityVerified: backup.integrityVerified, coverage: backup.coverage,
     };
   }
 
@@ -552,6 +666,8 @@ export function createDataPortService(
         },
         excludedStores: { ...config.excludedStores },
         storeCounts: Object.fromEntries(Object.entries(stores).map(([name, rows]) => [name, rows.length])),
+        coverage: salesCoverage((stores.sales ?? []) as DataPortRecord[]),
+        integrity: { algorithm: 'crc32-canonical-json-v1', checksum: backupChecksum(stores) },
         stores,
       };
     },
@@ -604,6 +720,13 @@ export function createDataPortService(
           assertUniqueIndexes(name, existing, writes, config);
           writesByStore.set(name, writes);
         }
+
+        const finalStores = Object.fromEntries(storeNames.map((name) => {
+          const rows = new Map((existingByStore.get(name) ?? []).map((row) => [row.id, row]));
+          for (const row of writesByStore.get(name) ?? []) rows.set(row.id, row);
+          return [name, [...rows.values()]];
+        }));
+        assertRelationships(finalStores);
 
         // No writes are issued until every store and unique-index constraint
         // has passed preflight. A later IndexedDB failure aborts this single

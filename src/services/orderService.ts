@@ -14,12 +14,18 @@ import { trackChange } from '@/data/repositories/changeTracker';
 import {
   customersRepository,
   dealsRepository,
+  toppingsRepository,
+  addOnsRepository,
+  menuItemsRepository,
+  itemPricesRepository,
   orderItemsRepository,
   ordersRepository,
   salesRepository,
 } from '@/data/repositories';
 import { getTaxConfig } from './restaurantService';
 import { customerService } from './customerService';
+import { menuService } from './menuService';
+import { priceDeal } from './dealService';
 import { notificationService } from './notificationService';
 import { settingsService, SETTING_KEYS } from './settingsService';
 import { syncQueueService } from './syncQueueService';
@@ -32,8 +38,11 @@ import type {
   SaleRecord,
   SelectedAddOn,
   SelectedTopping,
+  ToppingRecord,
+  AddOnRecord,
 } from '@/types/domain';
 import type { ID, Paisa } from '@/types/common';
+import { compareOrderSequence } from '@/utils/pagination';
 import { createId } from '@/utils/id';
 import { nowISO } from '@/utils/date';
 import {
@@ -69,6 +78,8 @@ export interface CartLine {
    * the deal's own pricing is the discount.
    */
   discountPercent?: number | null;
+  /** Catalog revision captured when a deal was added; stale bundles are refused. */
+  dealVersion?: string;
 }
 
 export interface CartTotals {
@@ -133,8 +144,8 @@ export function lineDiscount(line: CartLine): Paisa {
 /**
  * Compute totals for a cart.
  *
- * Exclusive tax is added on top of the subtotal. Inclusive tax is extracted
- * from it, so the grand total still equals the sum of the displayed prices.
+ * Tax applies after item/order discounts. Exclusive tax is added to the
+ * discounted value; inclusive tax is extracted from the displayed prices.
  * Rounding happens once, at the tax figure, to avoid per-line drift.
  *
  * Discounts come from two places and are simply added together:
@@ -168,52 +179,18 @@ export function calculateTotals(
     ? Math.min(100, Math.max(0, taxPercent))
     : 0;
 
-  let base: Omit<CartTotals, 'itemDiscountTotal' | 'discountTotal'>;
-  if (rate === 0) {
-    base = {
-      subtotal: gross,
-      taxTotal: 0,
-      grandTotal: gross,
-      itemCount,
-      taxPercent: 0,
-      taxInclusive,
-    };
-  } else if (taxInclusive) {
-    const net = Math.round((gross * 100) / (100 + rate));
-    base = {
-      subtotal: net,
-      taxTotal: gross - net,
-      grandTotal: gross,
-      itemCount,
-      taxPercent: rate,
-      taxInclusive,
-    };
-  } else {
-    const taxTotal = Math.round((gross * rate) / 100);
-    base = {
-      subtotal: gross,
-      taxTotal,
-      grandTotal: gross + taxTotal,
-      itemCount,
-      taxPercent: rate,
-      taxInclusive,
-    };
-  }
-
-  // The order-level discount may not push the payable total below zero and
-  // may not overlap the item-level discounts already applied.
-  const checkoutRoom = Math.max(0, base.subtotal - itemDiscountTotal);
+  // Discounts reduce the taxable merchandise value. Tax is rounded once;
+  // subtotal is always gross merchandise before tax/discount in both modes.
+  const checkoutRoom = Math.max(0, gross - itemDiscountTotal);
   const checkoutDiscount = isFiniteNumber(discount)
-    ? Math.min(Math.max(0, Math.round(discount)), checkoutRoom)
-    : 0;
+    ? Math.min(Math.max(0, Math.round(discount)), checkoutRoom) : 0;
   const discountTotal = itemDiscountTotal + checkoutDiscount;
-
-  return {
-    ...base,
-    itemDiscountTotal,
-    discountTotal,
-    grandTotal: Math.max(0, base.grandTotal - discountTotal),
-  };
+  const taxable = Math.max(0, gross - discountTotal);
+  const taxTotal = taxInclusive
+    ? taxable - Math.round((taxable * 100) / (100 + rate))
+    : Math.round((taxable * rate) / 100);
+  return { subtotal: gross, taxTotal, grandTotal: taxable + (taxInclusive ? 0 : taxTotal),
+    itemCount, taxPercent: rate, taxInclusive, itemDiscountTotal, discountTotal };
 }
 
 /**
@@ -260,6 +237,82 @@ async function nextOrderNumber(): Promise<string> {
   const next = current + 1;
   await settingsService.set(SETTING_KEYS.orderSequence, next);
   return `${prefix ?? ''}${String(next).padStart(4, '0')}`;
+}
+
+
+/** Resolve current catalog modifiers without changing historical receipts. */
+function resolveModifier<T extends ToppingRecord | AddOnRecord>(
+  selected: SelectedTopping | SelectedAddOn,
+  catalog: T[],
+  menuItemId: ID | null,
+  label: string,
+): T {
+  const matches = selected.modifierId
+    ? catalog.filter((entry) => entry.id === selected.modifierId)
+    : catalog.filter((entry) => entry.name.trim().toLocaleLowerCase() === selected.name.trim().toLocaleLowerCase());
+  const entry = matches[0];
+  if (!entry || matches.length !== 1 || entry.isActive !== 1) {
+    throw new ValidationError(`${label} “${selected.name}” is unavailable or ambiguous. Remove it and select a current option.`);
+  }
+  // Bundles keep their existing universal modifiers. Product-specific
+  // modifiers belong to individual menu lines, not an ambiguous whole deal.
+  if (entry.menuItemIds?.length && (!menuItemId || !entry.menuItemIds.includes(menuItemId))) {
+    throw new ValidationError(`${label} “${entry.name}” is not applicable to this ${menuItemId ? 'product' : 'deal'}.`);
+  }
+  if (entry.price !== selected.price) {
+    throw new ValidationError(`The price of “${entry.name}” changed. Remove and reselect it before checkout.`);
+  }
+  return entry;
+}
+
+async function validateModifiers(lines: CartLine[]): Promise<CartLine[]> {
+  const [toppings, addOns] = await Promise.all([toppingsRepository.list(), addOnsRepository.list()]);
+  return lines.map((line) => {
+    const resolveToppings = line.toppings.map((selected) => {
+      const entry = resolveModifier(selected, toppings, line.menuItemId, 'Topping');
+      return { modifierId: entry.id, name: entry.name, price: entry.price, costPrice: entry.costPrice ?? null };
+    });
+    const resolveAddOns = line.addOns.map((selected) => {
+      const entry = resolveModifier(selected, addOns, line.menuItemId, 'Add-on');
+      return { modifierId: entry.id, name: entry.name, price: entry.price, costPrice: entry.costPrice ?? null };
+    });
+    for (const entries of [resolveToppings, resolveAddOns]) {
+      if (new Set(entries.map((entry) => entry.modifierId)).size !== entries.length) {
+        throw new ValidationError(`A modifier is selected twice on “${line.name}”.`);
+      }
+    }
+    return { ...line, toppings: resolveToppings, addOns: resolveAddOns };
+  });
+}
+
+/** Unknown costs stay unknown; never substitute a selling price or purchase. */
+async function portionCost(line: CartLine): Promise<Paisa | null> {
+  let base: number | null = null;
+  if (line.kind === 'item' && line.menuItemId) {
+    const [menu, prices] = await Promise.all([
+      menuItemsRepository.getById(line.menuItemId),
+      itemPricesRepository.findByIndex('by_menuItemId', line.menuItemId),
+    ]);
+    const variant = prices.find((row) => !row.deletedAt && row.label === line.sizeLabel);
+    base = variant?.costPrice ?? menu?.costPrice ?? null;
+  } else if (line.dealId) {
+    const deal = await dealsRepository.getById(line.dealId);
+    if (deal && !deal.deletedAt) {
+      const costs = await Promise.all((deal.items ?? []).map(async (part) => {
+        const [menu, prices] = await Promise.all([
+          menuItemsRepository.getById(part.menuItemId),
+          itemPricesRepository.findByIndex('by_menuItemId', part.menuItemId),
+        ]);
+        const variant = prices.find((row) => !row.deletedAt && row.label === part.sizeLabel);
+        const cost = variant?.costPrice ?? menu?.costPrice;
+        return cost == null ? null : cost * part.quantity;
+      }));
+      base = costs.every((cost) => cost !== null) ? costs.reduce((sum, cost) => sum + cost!, 0) : null;
+    }
+  }
+  const modifiers = [...line.toppings, ...line.addOns];
+  if (base === null || modifiers.some((entry) => entry.costPrice == null)) return null;
+  return base + modifiers.reduce((sum, entry) => sum + entry.costPrice!, 0);
 }
 
 export interface CompleteOrderInput {
@@ -324,9 +377,33 @@ export const orderService = {
       })),
     }));
 
+    const catalogValidated = await validateModifiers(validated);
+    const dealMenu = validated.some((line) => line.dealId) ? new Map((await menuService.list()).map((entry) => [entry.item.id, entry])) : null;
+    for (const line of validated) {
+      if (!line.dealId) continue;
+      const deal = await dealsRepository.getById(line.dealId);
+      if (!deal || deal.deletedAt || !deal.isPublished || !dealMenu) throw new ValidationError('A deal in this order is no longer published. Remove it and choose a current deal.');
+      if (line.dealVersion && line.dealVersion !== `${deal.updatedAt}:${deal.rev ?? 1}`) throw new ValidationError(`Deal “${deal.name}” changed after it was added. Remove it and add the current deal.`);
+      const view = priceDeal(deal, dealMenu);
+      if (!view.isSellable || view.dealPrice !== line.unitPrice) throw new ValidationError(`Deal “${deal.name}” is no longer available at the cart price. Remove it and add the current deal.`);
+    }
+    const costs = await Promise.all(catalogValidated.map(portionCost));
+    const savings = await Promise.all(catalogValidated.map(async (line) => {
+      if (!line.dealId) return undefined;
+      const deal = await dealsRepository.getById(line.dealId);
+      if (!deal || deal.deletedAt) return undefined;
+      let regular = 0;
+      for (const part of deal.items) {
+        const rows = await itemPricesRepository.findByIndex('by_menuItemId', part.menuItemId);
+        const price = rows.find((row) => !row.deletedAt && row.label === part.sizeLabel)?.price;
+        if (price == null) return undefined;
+        regular += price * part.quantity;
+      }
+      return Math.max(0, (regular - line.unitPrice) * line.quantity);
+    }));
     const { taxPercent, taxInclusive } = await getTaxConfig();
     const totals = calculateTotals(
-      validated,
+      catalogValidated,
       taxPercent,
       taxInclusive,
       input.discount ?? 0,
@@ -345,7 +422,8 @@ export const orderService = {
     const timestamp = nowISO();
     const orderId = createId();
     const paymentMethod: PaymentMethod = input.paymentMethod ?? 'cash';
-    const amountPaid = input.amountPaid ?? totals.grandTotal;
+    const amountPaid = assertPaisa(input.amountPaid ?? totals.grandTotal, 'Amount paid');
+    if (amountPaid < totals.grandTotal) throw new ValidationError('Amount paid is less than the order total.');
 
     const orderType: OrderType = input.orderType ?? 'takeaway';
     const tableLabel = input.tableLabel?.trim() ? input.tableLabel.trim().slice(0, 20) : undefined;
@@ -400,6 +478,8 @@ export const orderService = {
       discountTotal: totals.discountTotal,
       taxTotal: totals.taxTotal,
       grandTotal: totals.grandTotal,
+      taxPercent: totals.taxPercent,
+      taxInclusive: totals.taxInclusive,
       paymentMethod,
       amountPaid,
       changeDue: Math.max(0, amountPaid - totals.grandTotal),
@@ -430,7 +510,7 @@ export const orderService = {
       rev: 1,
     };
 
-    const items: OrderItemRecord[] = validated.map((line) => {
+    const items: OrderItemRecord[] = catalogValidated.map((line, index) => {
       const toppingTotal = sumToppings(line.toppings);
       const addOnTotal = sumAddOns(line.addOns);
       return {
@@ -442,14 +522,16 @@ export const orderService = {
         name: line.name,
         sizeLabel: line.sizeLabel ?? undefined,
         unitPrice: line.unitPrice,
+        unitCost: costs[index] ?? null,
+        ...(savings[index] !== undefined ? { dealSavings: savings[index] } : {}),
         quantity: line.quantity,
         // Item-level discount only (order-level lives on the header).
         discount: lineDiscount(line),
         lineTotal: lineTotal(line) - lineDiscount(line),
         toppings: line.toppings.length ? line.toppings : undefined,
         addOns: line.addOns.length ? line.addOns : undefined,
-        toppingTotal: toppingTotal || undefined,
-        addOnTotal: addOnTotal || undefined,
+        toppingTotal: toppingTotal * line.quantity || undefined,
+        addOnTotal: addOnTotal * line.quantity || undefined,
         createdAt: timestamp,
         updatedAt: timestamp,
         deletedAt: null,
@@ -467,6 +549,8 @@ export const orderService = {
       discountTotal: totals.discountTotal,
       taxTotal: totals.taxTotal,
       grandTotal: totals.grandTotal,
+      taxPercent: totals.taxPercent,
+      taxInclusive: totals.taxInclusive,
       paymentMethod,
       itemCount: totals.itemCount,
       orderType,
@@ -589,6 +673,10 @@ export const orderService = {
       link: '/sales',
     });
 
+    await notificationService.create({ key: `payment:${order.id}`, kind: 'payment',
+      title: `Payment recorded · #${order.orderNumber}`,
+      body: `${order.paymentMethod ?? 'cash'} · Rs. ${(order.grandTotal / 100).toFixed(2)}`, link: '/sales' });
+
     for (const line of stockWrites) {
       if (line.isOutOfStock === 1) {
         await notificationService.create({
@@ -629,12 +717,22 @@ export const orderService = {
    * was deducted.
    */
   async cancel(orderId: ID): Promise<OrderRecord> {
+    return this.settleVoid(orderId, 'cancelled');
+  },
+
+  /** Full refund: no partial tender reversal is implied. Recorded atomically with stock restoration. */
+  async refund(orderId: ID, reason: string): Promise<OrderRecord> {
+    const note = assertText(reason, 'Refund reason', { min: 4, max: 200 });
+    return this.settleVoid(orderId, 'refunded', note);
+  },
+
+  async settleVoid(orderId: ID, status: 'cancelled' | 'refunded', reason?: string): Promise<OrderRecord> {
     const order = await ordersRepository.getById(orderId);
     if (!order || order.deletedAt) {
       throw new Error('Order not found.');
     }
     if (order.status !== 'completed') {
-      throw new Error('Only a completed order can be cancelled.');
+      throw new Error('Only a completed order can be cancelled or refunded.');
     }
 
     const items = await orderItemsRepository.findByIndex('by_orderId', orderId);
@@ -661,10 +759,11 @@ export const orderService = {
       }
     }
 
-    const cancelled: OrderRecord = {
+    const settled: OrderRecord = {
       ...order,
-      status: 'cancelled',
-      cancelledAt: timestamp,
+      status,
+      ...(status === 'cancelled' ? { cancelledAt: timestamp } : { refundedAt: timestamp }),
+      ...(reason ? { note: reason } : {}),
       updatedAt: timestamp,
       rev: (order.rev ?? 1) + 1,
     };
@@ -687,19 +786,19 @@ export const orderService = {
           orderStore.get(orderId),
         )) as OrderRecord | undefined;
         if (!current || current.status !== 'completed') {
-          throw new Error('Order is no longer cancellable.');
+          throw new Error('Order has already been cancelled or refunded.');
         }
 
-        await db.request(orderStore.put(cancelled));
+        await db.request(orderStore.put(settled));
 
         if (sale) {
-          const cancelledSale: SaleRecord = {
+          const settledSale: SaleRecord = {
             ...sale,
-            cancelledAt: timestamp,
+            ...(status === 'cancelled' ? { cancelledAt: timestamp } : { refundedAt: timestamp }),
             updatedAt: timestamp,
             rev: (sale.rev ?? 1) + 1,
           };
-          await db.request(saleStore.put(cancelledSale));
+          await db.request(saleStore.put(settledSale));
         }
 
         for (const [menuItemId, units] of Object.entries(restore)) {
@@ -727,20 +826,20 @@ export const orderService = {
     );
 
     await notificationService.create({
-      key: `void:${cancelled.id}`,
+      key: `${status}:${settled.id}`,
       kind: 'audit',
       severity: 'warning',
-      title: `Order #${cancelled.orderNumber} was cancelled`,
-      body: 'The sale is excluded from totals and its stock has been restored.',
+      title: `Order #${settled.orderNumber} was ${status}`,
+      body: `The sale is excluded from totals and its stock has been restored.${reason ? ` Reason: ${reason}` : ''}`,
       link: '/sales',
     });
 
     try {
-      await trackChange(STORES.orders, cancelled.id, 'update', cancelled);
+      await trackChange(STORES.orders, settled.id, 'update', settled);
       if (sale) {
         await trackChange(STORES.sales, sale.id, 'update', {
           ...sale,
-          cancelledAt: timestamp,
+          ...(status === 'cancelled' ? { cancelledAt: timestamp } : { refundedAt: timestamp }),
         });
       }
       for (const updated of inventoryWrites) {
@@ -750,7 +849,7 @@ export const orderService = {
       /* the cancellation is stored; sync can be reconciled later */
     }
 
-    return cancelled;
+    return settled;
   },
 
   async getOrder(id: ID): Promise<OrderRecord | undefined> {
@@ -777,7 +876,7 @@ export const orderService = {
     return orders
       // Newest creation time first; stable ID breaks timestamp ties.
       .sort((a, b) =>
-        b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id),
+        compareOrderSequence(a, b),
       )
       .map((order) => ({ order, sale: saleByOrder.get(order.id) }));
   },
@@ -786,7 +885,7 @@ export const orderService = {
     const orders = await ordersRepository.list();
     return orders
       .filter((order) => order.status === 'completed')
-      .sort((a, b) => (b.completedAt ?? '').localeCompare(a.completedAt ?? ''))
+      .sort(compareOrderSequence)
       .slice(0, limit);
   },
 

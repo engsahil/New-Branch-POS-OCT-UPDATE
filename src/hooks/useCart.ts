@@ -36,7 +36,7 @@ export interface UseCartResult {
     /** Item-level discount percentage from the menu item, if any. */
     discountPercent?: number | null;
   }) => void;
-  addDeal: (input: { dealId: ID; name: string; unitPrice: Paisa }) => void;
+  addDeal: (input: { dealId: ID; name: string; unitPrice: Paisa; version: string }) => void;
   setQuantity: (key: string, quantity: number) => void;
   incrementLine: (key: string) => void;
   decrementLine: (key: string) => void;
@@ -54,7 +54,7 @@ export function splitCartLine(lines: CartLine[], key: string, newKey: string): C
   if (!line || line.quantity < 2 || lines.some((item) => item.key === newKey)) return lines;
   const next = [...lines];
   next.splice(index, 1, { ...line, quantity: line.quantity - 1 },
-    { ...line, key: newKey, quantity: 1 });
+    { ...line, key: newKey, quantity: 1, toppings: line.toppings.map((entry) => ({ ...entry })), addOns: line.addOns.map((entry) => ({ ...entry })) });
   return next;
 }
 
@@ -86,7 +86,7 @@ export function useCart(): UseCartResult {
 
       if (existing) {
         return prev.map((line) =>
-          line.key === key
+          line.key === existing.key
             ? {
                 ...line,
                 quantity: Math.min(MAX_LINE_QUANTITY, line.quantity + 1),
@@ -117,7 +117,7 @@ export function useCart(): UseCartResult {
       const existing = prev.find((line) => line.key === key && line.toppings.length === 0 && line.addOns.length === 0);
       if (existing) {
         return prev.map((line) =>
-          line.key === key
+          line.key === existing.key
             ? {
                 ...line,
                 quantity: Math.min(MAX_LINE_QUANTITY, line.quantity + 1),
@@ -133,6 +133,7 @@ export function useCart(): UseCartResult {
           kind: 'deal' as const,
           menuItemId: null,
           dealId: input.dealId,
+          dealVersion: input.version,
           itemPriceId: null,
           name: input.name,
           sizeLabel: null,

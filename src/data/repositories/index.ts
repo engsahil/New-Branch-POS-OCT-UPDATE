@@ -11,6 +11,7 @@ import type {
   AdminRecord,
   CustomerRecord,
   DealRecord,
+  ExpenseRecord,
   InventoryRecord,
   ItemPriceRecord,
   MenuItemRecord,
@@ -61,6 +62,9 @@ export const orderItemsRepository: Repository<OrderItemRecord> =
 export const purchasesRepository: Repository<PurchaseRecord> =
   createRepository<PurchaseRecord>(STORES.purchases);
 
+export const expensesRepository: Repository<ExpenseRecord> =
+  createRepository<ExpenseRecord>(STORES.expenses);
+
 export const salesRepository: Repository<SaleRecord> =
   createRepository<SaleRecord>(STORES.sales);
 
@@ -103,5 +107,6 @@ export const repositories = {
   [STORES.notifications]: notificationsRepository,
   [STORES.receiptAudits]: receiptAuditsRepository,
   [STORES.purchases]: purchasesRepository,
+  [STORES.expenses]: expensesRepository,
   [STORES.syncQueue]: syncQueueRepository,
 } as const;

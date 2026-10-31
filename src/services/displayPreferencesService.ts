@@ -21,6 +21,8 @@ export interface DashboardPreferences {
   quickActions: boolean;
   /** Week chart, payment mix and order-type mix. */
   trends: boolean;
+  /** Sales/expense/profit summary; presentation never changes its figures. */
+  finance: boolean;
   bestSellers: boolean;
   stockAlerts: boolean;
   recentOrders: boolean;
@@ -45,6 +47,7 @@ export const DEFAULT_DISPLAY_PREFERENCES: DisplayPreferences = {
     metrics: true,
     quickActions: true,
     trends: true,
+    finance: true,
     bestSellers: true,
     stockAlerts: true,
     recentOrders: true,
@@ -66,6 +69,7 @@ export const DASHBOARD_SECTION_LABELS: Record<
   metrics: 'Today’s sales, orders and average order value',
   quickActions: 'Quick actions',
   trends: 'Sales trend, payment mix and order types',
+  finance: 'Sales, expenses and estimated profit',
   bestSellers: 'Best sellers',
   stockAlerts: 'Stock alerts',
   recentOrders: 'Recent orders',

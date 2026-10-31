@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import {
   AboutSection,
@@ -43,13 +44,15 @@ const SECTION_STORAGE_KEY = 'pos.admin.section';
 
 export default function AdminPage() {
   const { user, logout } = useAuth();
+  const location = useLocation();
+  const requestedSection = (location.state as { section?: string } | null)?.section;
   const { items: menuItems } = useMenu();
   const { items: stock } = useInventory();
   const { deals } = useDeals();
 
   const [active, setActive] = useState<string>(() => {
     try {
-      const stored = window.sessionStorage.getItem(SECTION_STORAGE_KEY);
+      const stored = requestedSection ?? window.sessionStorage.getItem(SECTION_STORAGE_KEY);
       return stored && SECTIONS.some((s) => s.id === stored)
         ? stored
         : 'restaurant';
@@ -57,6 +60,10 @@ export default function AdminPage() {
       return 'restaurant';
     }
   });
+
+  useEffect(() => {
+    if (requestedSection && SECTIONS.some((section) => section.id === requestedSection)) setActive(requestedSection);
+  }, [requestedSection]);
 
   useEffect(() => {
     try {

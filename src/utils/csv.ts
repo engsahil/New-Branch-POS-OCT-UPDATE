@@ -10,7 +10,9 @@
 export type CsvCell = string | number | null | undefined;
 
 function escapeCell(value: CsvCell): string {
-  const text = value === null || value === undefined ? '' : String(value);
+  const raw = value === null || value === undefined ? '' : String(value);
+  // Preserve numeric cells, but neutralise formulas in untrusted text cells.
+  const text = typeof value === 'string' && /^[\s]*[=+@-]|^[\t\r]/.test(raw) ? `'${raw}` : raw;
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 

@@ -10,7 +10,7 @@ import {
 import { formatMoney, parseMoney } from '@/utils/currency';
 import { PAYMENT_METHOD_OPTIONS } from '@/utils/payment';
 import type { Paisa } from '@/types/common';
-import type { PaymentMethod } from '@/types/domain';
+import type { PaymentMethod, AddOnRecord, ToppingRecord } from '@/types/domain';
 import { useToppings } from '@/hooks/useToppings';
 import { useAddOns } from '@/hooks/useAddOns';
 import type { SelectedAddOn, SelectedTopping } from '@/types/domain';
@@ -123,19 +123,23 @@ export function CartPanel({
     }
   }
 
-  function toggleTopping(line: CartLine, name: string, price: number) {
-    const exists = line.toppings.some((t) => t.name === name);
+  function applicable(record: AddOnRecord | ToppingRecord, line: CartLine) {
+    return !record.menuItemIds?.length || Boolean(line.menuItemId && record.menuItemIds.includes(line.menuItemId));
+  }
+
+  function toggleTopping(line: CartLine, record: ToppingRecord) {
+    const exists = line.toppings.some((t) => t.modifierId === record.id || (!t.modifierId && t.name === record.name));
     const next = exists
-      ? line.toppings.filter((t) => t.name !== name)
-      : [...line.toppings, { name, price }];
+      ? line.toppings.filter((t) => t.modifierId ? t.modifierId !== record.id : t.name !== record.name)
+      : [...line.toppings, { modifierId: record.id, name: record.name, price: record.price }];
     onUpdateToppings(line.key, next);
   }
 
-  function toggleAddOn(line: CartLine, name: string, price: number) {
-    const exists = line.addOns.some((a) => a.name === name);
+  function toggleAddOn(line: CartLine, record: AddOnRecord) {
+    const exists = line.addOns.some((a) => a.modifierId === record.id || (!a.modifierId && a.name === record.name));
     const next = exists
-      ? line.addOns.filter((a) => a.name !== name)
-      : [...line.addOns, { name, price }];
+      ? line.addOns.filter((a) => a.modifierId ? a.modifierId !== record.id : a.name !== record.name)
+      : [...line.addOns, { modifierId: record.id, name: record.name, price: record.price }];
     onUpdateAddOns(line.key, next);
   }
 
@@ -159,9 +163,10 @@ export function CartPanel({
         </div>
       ) : (
         <ul className={styles.lines}>
-          {lines.map((line) => {
+          {lines.map((line, lineIndex) => {
             const label = line.sizeLabel ? `${line.name} ${line.sizeLabel}` : line.name;
             const isExpanded = expanded === line.key;
+            const instanceLabel = `${label}, item ${lineIndex + 1}`;
             const itemSaving = lineDiscount(line);
             const lineGross = lineTotal(line);
 
@@ -183,7 +188,7 @@ export function CartPanel({
                       type="button"
                       className={styles.stepButton}
                       onClick={() => onDecrement(line.key)}
-                      aria-label={`Decrease ${label} quantity`}
+                      aria-label={`Decrease ${instanceLabel} quantity`}
                     >
                       <MinusIcon width={14} height={14} />
                     </button>
@@ -192,7 +197,7 @@ export function CartPanel({
                       type="button"
                       className={styles.stepButton}
                       onClick={() => onIncrement(line.key)}
-                      aria-label={`Increase ${label} quantity`}
+                      aria-label={`Increase ${instanceLabel} quantity`}
                     >
                       <PlusIcon width={14} height={14} />
                     </button>
@@ -208,83 +213,51 @@ export function CartPanel({
                     type="button"
                     className={styles.remove}
                     onClick={() => onRemove(line.key)}
-                    aria-label={`Remove ${label}`}
+                    aria-label={`Remove ${instanceLabel}`}
                   >
                     <CloseIcon width={15} height={15} />
                   </button>
                 </div>
 
-                <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
-                  <button
-                    type="button"
-                    className={styles.stepButton}
-                    style={{ width: 'auto', padding: '0 8px', border: '1px solid var(--color-border)', borderRadius: '6px' }}
-                    onClick={() => toggleExpand(line.key, 'toppings')}
-                  >
-                    Toppings{line.toppings.length ? ` (${line.toppings.length})` : ''}
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.stepButton}
-                    style={{ width: 'auto', padding: '0 8px', border: '1px solid var(--color-border)', borderRadius: '6px' }}
-                    onClick={() => toggleExpand(line.key, 'addons')}
-                  >
-                    Add-ons{line.addOns.length ? ` (${line.addOns.length})` : ''}
-                  </button>
+                <div className={styles.modifierActions}>
+                  {(['toppings', 'addons'] as const).map((type) => {
+                    const count = type === 'toppings' ? line.toppings.length : line.addOns.length;
+                    return <button key={type} type="button" className={styles.modifierButton}
+                      aria-label={`${type === 'toppings' ? 'Toppings' : 'Add-ons'} for ${instanceLabel}`}
+                      aria-expanded={isExpanded && picker === type}
+                      onClick={() => toggleExpand(line.key, type)}>
+                      {type === 'toppings' ? 'Toppings' : 'Add-ons'}{count ? ` (${count})` : ''}
+                    </button>;
+                  })}
+                  {line.quantity > 1 ? <button type="button" className={styles.modifierButton} aria-label={`Split one ${instanceLabel}`} onClick={() => onSplit(line.key)}>Split one item</button> : null}
                 </div>
-
-                {line.quantity > 1 ? (
-                  <div>
-                    <span className={styles.lineMeta}>Modifiers apply to all {line.quantity} items on this line. </span>
-                    <button type="button" onClick={() => onSplit(line.key)}>
-                      Split one item
-                    </button>
-                  </div>
-                ) : null}
-
-                {isExpanded && picker === 'toppings' ? (
-                  <div style={{ border: '1px solid var(--color-border)', borderRadius: '8px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '6px', background: 'var(--color-surface-alt)' }}>
-                    {availableToppings.length === 0 ? (
-                      <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>No toppings configured. Add in Admin → Toppings.</span>
-                    ) : (
-                      availableToppings.map((t) => {
-                        const selected = line.toppings.some((x) => x.name === t.name);
-                        return (
-                          <label key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={selected}
-                              onChange={() => toggleTopping(line, t.name, t.price)}
-                            />
-                            <span>{t.name} {t.price > 0 ? `(+${formatMoney(t.price)})` : ''}</span>
-                          </label>
-                        );
-                      })
-                    )}
-                  </div>
-                ) : null}
-
-                {isExpanded && picker === 'addons' ? (
-                  <div style={{ border: '1px solid var(--color-border)', borderRadius: '8px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '6px', background: 'var(--color-surface-alt)' }}>
-                    {availableAddOns.length === 0 ? (
-                      <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>No add-ons configured. Add in Admin → Add-ons.</span>
-                    ) : (
-                      availableAddOns.map((a) => {
-                        const selected = line.addOns.some((x) => x.name === a.name);
-                        return (
-                          <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={selected}
-                              onChange={() => toggleAddOn(line, a.name, a.price)}
-                            />
-                            <span>{a.name} {a.price > 0 ? `(+${formatMoney(a.price)})` : ''}</span>
-                          </label>
-                        );
-                      })
-                    )}
-                  </div>
-                ) : null}
+                {line.quantity > 1 ? <p className={styles.lineMeta}>Choices apply to all {line.quantity} on this line. Split one to customise a single item.</p> : null}
+                {isExpanded ? <div className={styles.modifierPicker}>
+                  {(() => {
+                    const catalog = picker === 'toppings' ? availableToppings : availableAddOns;
+                    const choices = catalog.filter((record) => applicable(record, line));
+                    const selected = picker === 'toppings' ? line.toppings : line.addOns;
+                    return <>
+                      <p className={styles.lineMeta}>Only this cart line is changed.{line.kind === 'deal' ? ' Product-specific options are available on individual items.' : ''}</p>
+                      {choices.length === 0 ? <span className={styles.lineMeta}>No applicable {picker === 'toppings' ? 'toppings' : 'add-ons'} configured. Manage these in Settings.</span> : choices.map((record) => {
+                        const checked = selected.some((entry) => entry.modifierId === record.id || (!entry.modifierId && entry.name === record.name));
+                        return <label key={record.id} className={styles.modifierChoice}>
+                          <input type="checkbox" checked={checked} onChange={() => picker === 'toppings' ? toggleTopping(line, record as ToppingRecord) : toggleAddOn(line, record as AddOnRecord)} />
+                          <span>{record.name}</span><span>{record.price ? `+${formatMoney(record.price)}` : 'Free'}</span>
+                        </label>;
+                      })}
+                      {selected.length ? <div className={styles.selectedModifiers}>
+                        {selected.map((entry, index) => <button type="button" key={entry.modifierId ?? `${entry.name}-${index}`}
+                          aria-label={`Remove ${entry.name} from ${instanceLabel}`}
+                          onClick={() => picker === 'toppings'
+                            ? onUpdateToppings(line.key, line.toppings.filter((_, i) => i !== index))
+                            : onUpdateAddOns(line.key, line.addOns.filter((_, i) => i !== index))}>
+                          {entry.name} · {formatMoney(entry.price)} ×
+                        </button>)}
+                      </div> : null}
+                    </>;
+                  })()}
+                </div> : null}
               </li>
             );
           })}

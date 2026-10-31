@@ -103,7 +103,7 @@ function totalsFromLines(
   /*
    * These are the exact rules orderService.calculateTotals applies at
    * checkout: gross is the line value before any discount, tax is computed on
-   * that gross (inclusive or exclusive as configured), the order-level
+   * the discounted value (inclusive or exclusive as saved at checkout), the order-level
    * discount is clamped to what remains after item discounts, and rounding
    * happens once at the tax figure. Reusing the stored line figures avoids
    * any percentage round-trip drift.
@@ -125,32 +125,13 @@ function totalsFromLines(
     ? Math.min(100, Math.max(0, taxPercent))
     : 0;
 
-  let taxTotal = 0;
-  let baseGrand = gross;
-  if (rate > 0) {
-    if (taxInclusive) {
-      const net = Math.round((gross * 100) / (100 + rate));
-      taxTotal = gross - net;
-    } else {
-      taxTotal = Math.round((gross * rate) / 100);
-      baseGrand = gross + taxTotal;
-    }
-  }
-
   const checkoutRoom = Math.max(0, gross - itemDiscountTotal);
-  const checkoutDiscount = Math.min(
-    Math.max(0, Math.round(orderLevelDiscount)),
-    checkoutRoom,
-  );
+  const checkoutDiscount = Math.min(Math.max(0, Math.round(orderLevelDiscount)), checkoutRoom);
   const discountTotal = itemDiscountTotal + checkoutDiscount;
-
-  return {
-    subtotal: gross,
-    discountTotal,
-    taxTotal,
-    grandTotal: Math.max(0, baseGrand - discountTotal),
-    itemCount,
-  };
+  const taxable = Math.max(0, gross - discountTotal);
+  const taxTotal = taxInclusive ? taxable - Math.round(taxable * 100 / (100 + rate)) : Math.round(taxable * rate / 100);
+  return { subtotal: gross, discountTotal, taxTotal,
+    grandTotal: taxable + (taxInclusive ? 0 : taxTotal), itemCount };
 }
 
 export const receiptEditService = {
@@ -206,7 +187,9 @@ export const receiptEditService = {
       throw new ReceiptEditError('A cancelled or refunded sale cannot be edited.');
     }
 
-    const { taxPercent, taxInclusive } = await getTaxConfig();
+    const fallback = await getTaxConfig();
+    const taxPercent = order.taxPercent ?? fallback.taxPercent;
+    const taxInclusive = order.taxInclusive ?? fallback.taxInclusive;
 
     // The order-level discount typed at checkout must survive a line edit.
     const previousItemDiscount = items.reduce(

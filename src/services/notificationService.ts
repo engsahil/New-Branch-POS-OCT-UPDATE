@@ -21,6 +21,7 @@ import type {
   NotificationSeverity,
 } from '@/types/domain';
 import { settingsService } from './settingsService';
+import type { SettingRecord } from '@/types/domain';
 import { nowISO } from '@/utils/date';
 
 export const NOTIFICATION_KINDS: readonly NotificationKind[] = [
@@ -46,12 +47,35 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   kinds: { order: true, stock: true, payment: true, audit: true, system: true },
 };
 
+export interface NotificationSnapshot {
+  notifications: NotificationRecord[];
+  unreadCount: number;
+  preferences: NotificationPreferences;
+}
+
+/** Critical stock warnings remain accessible when ordinary alerts are muted. */
+export function notificationEligible(
+  record: Pick<NotificationRecord, 'kind' | 'severity'>,
+  preferences: NotificationPreferences,
+): boolean {
+  return record.severity === 'critical' ||
+    (preferences.enabled && preferences.kinds[record.kind]);
+}
+
+export function compareNotifications(a: NotificationRecord, b: NotificationRecord): number {
+  return Date.parse(b.createdAt) - Date.parse(a.createdAt) || b.id.localeCompare(a.id);
+}
+
 type Listener = () => void;
 const listeners = new Set<Listener>();
+const channel = typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined'
+  ? new BroadcastChannel('pos.notifications.changed') : null;
+if (channel) channel.onmessage = () => { for (const listener of listeners) listener(); };
 
 /** Tell mounted views that the notification list or read state changed. */
 export function notifyNotificationsChanged(): void {
   for (const listener of listeners) listener();
+  channel?.postMessage('changed');
 }
 
 export function subscribeNotifications(listener: Listener): () => void {
@@ -111,10 +135,21 @@ export const notificationService = {
 
   async savePreferences(preferences: NotificationPreferences): Promise<void> {
     const safe = normalisePreferences(preferences);
-    await Promise.all([
-      settingsService.set(NOTIFICATION_SETTING_KEYS.enabled, safe.enabled),
-      settingsService.set(NOTIFICATION_SETTING_KEYS.kinds, safe.kinds),
-    ]);
+    // Both controls commit together. Existing read timestamps are untouched.
+    await db.transaction([STORES.settings], 'readwrite', async (stores) => {
+      const store = stores[STORES.settings]!;
+      for (const [id, value] of [
+        [NOTIFICATION_SETTING_KEYS.enabled, safe.enabled],
+        [NOTIFICATION_SETTING_KEYS.kinds, safe.kinds],
+      ] as const) {
+        const current = await db.request(store.get(id)) as SettingRecord | undefined;
+        const timestamp = nowISO();
+        await db.request(store.put({
+          ...current, id, value, createdAt: current?.createdAt ?? timestamp,
+          updatedAt: timestamp, deletedAt: null, rev: (current?.rev ?? 0) + 1,
+        }));
+      }
+    });
     notifyNotificationsChanged();
   },
 
@@ -125,27 +160,26 @@ export const notificationService = {
    */
   async create(input: NotificationInput): Promise<NotificationRecord | null> {
     try {
-      const preferences = await readPreferences(settingsService);
-      if (!preferences.enabled || !preferences.kinds[input.kind]) return null;
-
       const key = input.key.trim();
       if (!key) return null;
-
-      // Check and insert in a single write transaction: concurrent creators,
-      // including other tabs, cannot both insert the same live key.
-      const { record, created } = await db.transaction([STORES.notifications], 'readwrite', async (stores) => {
+      // Preferences, deduplication and insertion share one transaction.
+      const { record, created } = await db.transaction([STORES.notifications, STORES.settings], 'readwrite', async (stores) => {
+        const settings = stores[STORES.settings]!;
+        const [enabled, kinds] = await Promise.all([
+          db.request(settings.get(NOTIFICATION_SETTING_KEYS.enabled)) as Promise<SettingRecord<boolean> | undefined>,
+          db.request(settings.get(NOTIFICATION_SETTING_KEYS.kinds)) as Promise<SettingRecord<NotificationPreferences['kinds']> | undefined>,
+        ]);
+        const preferences = normalisePreferences({ enabled: enabled?.value ?? true, kinds: kinds?.value ?? DEFAULT_NOTIFICATION_PREFERENCES.kinds });
+        const severity = input.severity ?? 'info';
+        if (!notificationEligible({ kind: input.kind, severity }, preferences)) return { record: null, created: false };
         const store = stores[STORES.notifications]!;
         const matches = await db.request(store.index('by_key').getAll(key)) as NotificationRecord[];
         const existing = matches.find((entry) => !entry.deletedAt);
         if (existing) return { record: existing, created: false };
         const record = buildEntity<NotificationRecord>({
-          key,
-          kind: input.kind,
-          severity: input.severity ?? 'info',
-          title: input.title.slice(0, 120),
-          body: input.body?.slice(0, 300),
-          link: input.link ?? null,
-          readAt: null,
+          key, kind: input.kind, severity,
+          title: input.title.slice(0, 120), body: input.body?.slice(0, 300),
+          link: input.link ?? null, readAt: null,
         });
         await db.request(store.put(record));
         return { record, created: true };
@@ -157,36 +191,57 @@ export const notificationService = {
     }
   },
 
+  /** One read transaction supplies row state, badge and preferences. */
+  async snapshot(limit = 40): Promise<NotificationSnapshot> {
+    return db.transaction([STORES.notifications, STORES.settings], 'readonly', async (stores) => {
+      const settings = stores[STORES.settings]!;
+      const [rows, enabled, kinds] = await Promise.all([
+        db.request(stores[STORES.notifications]!.getAll()) as Promise<NotificationRecord[]>,
+        db.request(settings.get(NOTIFICATION_SETTING_KEYS.enabled)) as Promise<SettingRecord<boolean> | undefined>,
+        db.request(settings.get(NOTIFICATION_SETTING_KEYS.kinds)) as Promise<SettingRecord<NotificationPreferences['kinds']> | undefined>,
+      ]);
+      const preferences = normalisePreferences({ enabled: enabled?.value ?? true, kinds: kinds?.value ?? DEFAULT_NOTIFICATION_PREFERENCES.kinds });
+      const eligible = rows.filter((row) => !row.deletedAt && notificationEligible(row, preferences));
+      return {
+        notifications: eligible.sort(compareNotifications).slice(0, Math.max(1, limit)),
+        unreadCount: eligible.filter((row) => !row.readAt).length,
+        preferences,
+      };
+    });
+  },
+
   async list(limit = 40): Promise<NotificationRecord[]> {
-    const all = await notificationsRepository.list();
-    return all
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, Math.max(1, limit));
+    return (await this.snapshot(limit)).notifications;
   },
 
   async unreadCount(): Promise<number> {
-    const all = await notificationsRepository.list();
-    return all.filter((entry) => !entry.readAt).length;
+    return (await this.snapshot(Number.MAX_SAFE_INTEGER)).unreadCount;
   },
 
-  async markRead(id: string): Promise<void> {
-    const record = await notificationsRepository.getById(id);
-    if (!record || record.readAt) return;
-    await notificationsRepository.update(id, { readAt: nowISO() });
-    notifyNotificationsChanged();
+  /** Preserve the first read timestamp, including under concurrent readers. */
+  async markReadMany(ids: readonly string[]): Promise<number> {
+    const requested = new Set(ids);
+    const changed = await db.transaction([STORES.notifications], 'readwrite', async (stores) => {
+      const store = stores[STORES.notifications]!;
+      let count = 0;
+      for (const id of requested) {
+        const current = await db.request(store.get(id)) as NotificationRecord | undefined;
+        if (!current || current.deletedAt || current.readAt) continue;
+        const timestamp = nowISO();
+        await db.request(store.put({ ...current, readAt: timestamp, updatedAt: timestamp, rev: (current.rev ?? 1) + 1 }));
+        count += 1;
+      }
+      return count;
+    });
+    if (changed) notifyNotificationsChanged();
+    return changed;
   },
+
+  async markRead(id: string): Promise<void> { await this.markReadMany([id]); },
 
   async markAllRead(): Promise<number> {
-    const all = await notificationsRepository.list();
-    const unread = all.filter((entry) => !entry.readAt);
-    if (unread.length === 0) return 0;
-
-    const timestamp = nowISO();
-    for (const entry of unread) {
-      await notificationsRepository.update(entry.id, { readAt: timestamp });
-    }
-    notifyNotificationsChanged();
-    return unread.length;
+    const eligible = await this.list(Number.MAX_SAFE_INTEGER);
+    return this.markReadMany(eligible.map((entry) => entry.id));
   },
 
   /** Remove read notifications older than the retention window. */

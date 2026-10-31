@@ -34,10 +34,11 @@ const allStores = [
   'notifications',
   'receiptAudits',
   'purchases',
+  'expenses',
   'syncQueue',
 ];
 const backupStores = allStores.filter((name) => !['admin', 'syncQueue'].includes(name));
-const legacyBackupStores = allStores.filter((name) => name !== 'syncQueue');
+const legacyBackupStores = ['admin', 'restaurant', 'menuItems', 'itemPrices', 'inventory', 'deals', 'orders', 'orderItems', 'sales', 'customers', 'toppings', 'addOns', 'settings'];
 const excludedStores = {
   admin: 'device-local sign-in credentials',
   syncQueue: 'transport queue only',
@@ -50,11 +51,12 @@ const config = {
   applicationVersion: '3.1.0',
   dataSchemaVersion: 1,
   databaseName: 'pos-db',
-  databaseVersion: 7,
+  databaseVersion: 9,
   allStores,
   backupStores,
   legacyBackupStores,
-  optionalStores: ['notifications', 'receiptAudits', 'purchases'],
+  optionalStores: ['notifications', 'receiptAudits', 'purchases', 'expenses'],
+  storeIntroducedAt: { notifications: 7, receiptAudits: 7, purchases: 8, expenses: 9 },
   excludedStores,
   orderSequenceSettingId: 'order.sequence',
   uniqueIndexes: { orders: 'orderNumber', sales: 'orderId' },
@@ -274,6 +276,7 @@ const records = {
       customerId: 'customer-1',
     },
   ],
+  expenses: [{ ...base('expense-rent'), title: 'October rent', category: 'Rent', amount: 50000, expenseDate: '2026-10-02', paymentMethod: 'cash', payee: 'Synthetic landlord', reference: 'RENT-10', description: '', notes: '' }],
   toppings: [
     { ...base('topping-cheese'), name: 'Cheese', price: 50, isActive: 1 },
   ],
@@ -398,6 +401,7 @@ assert.equal(destinationDb.data.get('orders').length, 2);
 const newerBackup = structuredClone(fileRoundTrip);
 newerBackup.stores.customers[0].name = 'Avery Updated';
 newerBackup.stores.customers[0].updatedAt = future;
+newerBackup.integrity.checksum = core.backupChecksum(newerBackup.stores);
 const updateResult = await destinationService.importBackup(newerBackup);
 assert.equal(updateResult.updated, 1);
 assert.equal(destinationDb.data.get('customers')[0].name, 'Avery Updated');
@@ -454,6 +458,13 @@ assert.throws(() => untouchedService.previewBackup(incompatibleApp), /incompatib
 const mismatchedSchema = structuredClone(fileRoundTrip);
 mismatchedSchema.schema.databaseVersion -= 1;
 assert.throws(() => untouchedService.previewBackup(mismatchedSchema), /versions do not match/i);
+const corrupted = structuredClone(fileRoundTrip);
+corrupted.stores.sales[0].grandTotal += 1;
+assert.throws(() => untouchedService.previewBackup(corrupted), /checksum/i);
+const orphan = structuredClone(fileRoundTrip);
+orphan.stores.orderItems[0].orderId = 'missing-order';
+orphan.integrity.checksum = core.backupChecksum(orphan.stores);
+assert.throws(() => untouchedService.previewBackup(orphan), /relationship/i);
 const missingStore = structuredClone(fileRoundTrip);
 delete missingStore.stores.inventory;
 assert.throws(() => untouchedService.previewBackup(missingStore), /manifest/i);
@@ -469,10 +480,15 @@ preUpgrade.application.version = '3.1.0';
 preUpgrade.source.databaseVersion = 6;
 preUpgrade.schema.databaseVersion = 6;
 preUpgrade.schema.stores = preUpgrade.schema.stores.filter(
-  (name) => !['notifications', 'receiptAudits'].includes(name),
+  (name) => !['notifications', 'receiptAudits', 'purchases', 'expenses'].includes(name),
 );
 delete preUpgrade.stores.notifications;
 delete preUpgrade.stores.receiptAudits;
+delete preUpgrade.stores.purchases;
+delete preUpgrade.stores.expenses;
+delete preUpgrade.storeCounts;
+delete preUpgrade.coverage;
+delete preUpgrade.integrity;
 const upgradeDb = new MemoryPortDatabase({});
 const upgradeService = serviceFor(upgradeDb);
 const upgradePreview = upgradeService.previewBackup(preUpgrade);

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Button, Input } from '@/components/ui';
+import { ModifierProductScope } from './ModifierProductScope';
 import { PriceInput } from './PriceInput';
 import { toppingService, type ToppingInput } from '@/services/toppingService';
+import type { ID, Paisa } from '@/types/common';
 import type { ToppingRecord } from '@/types/domain';
 import { notifyToppingsChanged } from '@/hooks/useToppings';
 import { formatMoney } from '@/utils/currency';
@@ -12,6 +14,8 @@ export function ToppingsSection() {
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState('');
   const [price, setPrice] = useState<number | null>(0);
+  const [cost, setCost] = useState<Paisa | null>(null);
+  const [productIds, setProductIds] = useState<ID[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,6 +43,8 @@ export function ToppingsSection() {
       name: name.trim(),
       price: price ?? 0,
       isActive: true,
+      costPrice: cost,
+      menuItemIds: productIds,
     };
     try {
       if (editingId) {
@@ -48,11 +54,13 @@ export function ToppingsSection() {
       }
       setName('');
       setPrice(0);
+      setCost(null);
+      setProductIds([]);
       setEditingId(null);
       await load();
       notifyToppingsChanged();
-    } catch {
-      setError('Could not save topping.');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Could not save this option.');
     }
   }
 
@@ -66,6 +74,8 @@ export function ToppingsSection() {
     setEditingId(item.id);
     setName(item.name);
     setPrice(item.price);
+    setCost(item.costPrice ?? null);
+    setProductIds(item.menuItemIds ?? []);
   }
 
   return (
@@ -81,10 +91,12 @@ export function ToppingsSection() {
             fullWidth
           />
           <PriceInput label="Extra price" name="toppingPrice" value={price} onChange={setPrice} />
+          <PriceInput label="Known cost per serving (optional)" name="toppingCost" value={cost} onChange={setCost} hint="Used only for new sales' estimated profit. Leave blank if unknown." />
+          <ModifierProductScope name="topping" value={productIds} onChange={setProductIds} />
           {error ? <p className={styles.failure}>{error}</p> : null}
           <div className={styles.actions}>
             {editingId ? (
-              <Button variant="ghost" type="button" onClick={() => { setEditingId(null); setName(''); setPrice(0); }}>
+              <Button variant="ghost" type="button" onClick={() => { setEditingId(null); setName(''); setPrice(0); setCost(null); setProductIds([]); }}>
                 Cancel
               </Button>
             ) : null}
@@ -100,7 +112,7 @@ export function ToppingsSection() {
         <div className={styles.details}>
           {items.map((t) => (
             <div key={t.id} className={styles.row}>
-              <span className={styles.rowLabel}>{t.name} · {formatMoney(t.price)}</span>
+              <span className={styles.rowLabel}>{t.name} · {formatMoney(t.price)}<small className={styles.rowLabel}> · {t.menuItemIds?.length ? `${t.menuItemIds.length} products` : 'All products'}</small></span>
               <span className={styles.actions}>
                 <Button variant="ghost" size="sm" onClick={() => startEdit(t)}>Edit</Button>
                 <Button variant="ghost" size="sm" onClick={() => void handleDelete(t.id)}>Delete</Button>

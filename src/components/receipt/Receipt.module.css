@@ -377,3 +377,5 @@
     box-shadow: none;
   }
 }
+
+.voidBanner { margin-block: 2mm; padding: 2mm 1mm; border: 0.5mm solid #000; text-align: center; font-weight: 700; overflow-wrap: anywhere; }

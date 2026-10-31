@@ -17,8 +17,9 @@
  * needs no network.
  */
 
+const VERSION = __APP_VERSION__;
 const REVISION = __BUILD_REVISION__;
-const CACHE = `pos-v${REVISION}`;
+const CACHE = `pos-v${VERSION}-${REVISION}`;
 
 /** Every file emitted by the build, relative to the worker's scope. */
 const PRECACHE = __PRECACHE_MANIFEST__;

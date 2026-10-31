@@ -25,10 +25,10 @@ export interface SettingsSectionProps {
 
 const NOTIFICATION_LABELS: Record<string, string> = {
   order: 'Completed orders',
-  stock: 'Low and out-of-stock alerts',
-  payment: 'Payment problems',
+  stock: 'Stock receipts and availability alerts',
+  payment: 'Recorded payments',
   audit: 'Receipt corrections and cancellations',
-  system: 'Application notices',
+  system: 'Backup and data notices',
 };
 
 export function SettingsSection({ onOpenAbout }: SettingsSectionProps = {}) {
@@ -179,7 +179,7 @@ export function SettingsSection({ onOpenAbout }: SettingsSectionProps = {}) {
           </span>
         </div>
         <p className={styles.hint}>
-          Choose which new events appear in the notification centre. Changes save automatically; existing entries are not marked read or removed.
+          Choose which new events appear in the notification centre. Changes save automatically; existing entries are kept with their read state unchanged. Critical out-of-stock alerts always remain accessible.
         </p>
 
         <label className={styles.toggleRow}>
@@ -195,12 +195,12 @@ export function SettingsSection({ onOpenAbout }: SettingsSectionProps = {}) {
           <span>
             <span className={styles.toggleLabel}>Show notifications</span>
             <span className={styles.toggleHint}>
-              Turning this off stops new entries; existing ones stay visible.
+              Muted categories are hidden, not marked read. Critical out-of-stock alerts remain visible.
             </span>
           </span>
         </label>
 
-        {(['order', 'stock', 'audit'] as const).map((kind) => (
+        {(['order', 'stock', 'payment', 'audit', 'system'] as const).map((kind) => (
           <label key={kind} className={styles.toggleRow}>
             <input
               type="checkbox"
