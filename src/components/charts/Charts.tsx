@@ -13,6 +13,8 @@ export interface TrendChartProps {
   height?: number;
   /** Accessible summary of the whole series. */
   summary: string;
+  /** Show every nth axis label; all data points remain plotted. */
+  axisEvery?: number;
 }
 
 /**
@@ -23,7 +25,7 @@ export interface TrendChartProps {
  * without an animation loop. Points are evenly spaced, so an empty day still
  * occupies its slot on the x axis instead of vanishing.
  */
-export function TrendChart({ points, height = 128, summary }: TrendChartProps) {
+export function TrendChart({ points, height = 128, summary, axisEvery = 1 }: TrendChartProps) {
   const gradientId = useId().replace(/[:]/g, '');
   const width = 320;
   const padX = 6;
@@ -83,12 +85,12 @@ export function TrendChart({ points, height = 128, summary }: TrendChartProps) {
         />
       </svg>
       <ul className={styles.trendAxis}>
-        {coords.map((point) => (
-          <li key={point.label} className={styles.axisPoint}>
-            <span className={styles.axisLabel}>{point.label}</span>
-            <span className={styles.axisValue}>
-              {formatMoney(point.value, { withSymbol: false })}
-            </span>
+        {coords.map((point, index) => (
+          <li key={`${point.label}-${index}`} className={styles.axisPoint}>
+            {index % Math.max(1, axisEvery) === 0 || index === coords.length - 1 ? <>
+              <span className={styles.axisLabel}>{point.label}</span>
+              <span className={styles.axisValue}>{formatMoney(point.value, { withSymbol: false })}</span>
+            </> : <span className={styles.axisLabel} aria-hidden="true">·</span>}
           </li>
         ))}
       </ul>
@@ -204,3 +206,17 @@ export const CHART_COLORS = [
   'var(--chart-4)',
   'var(--chart-5)',
 ];
+
+export interface BarChartProps { rows: { label: string; value: number; detail?: string }[]; summary: string; formatValue: (value: number) => string; }
+/** Horizontal bars: dependency-free, readable on narrow screens, no animation. */
+export function BarChart({ rows, summary, formatValue }: BarChartProps) {
+  const peak = Math.max(...rows.map((row) => Math.max(0, row.value)), 0);
+  if (!rows.length || peak === 0) return <p className={styles.empty} role="img" aria-label={summary}>No data in this period yet.</p>;
+  return <ul className={styles.bars} role="img" aria-label={summary}>
+    {rows.map((row) => <li key={row.label} className={styles.barRow}>
+      <div className={styles.barLabel}><span>{row.label}</span><strong>{formatValue(row.value)}</strong></div>
+      <div className={styles.barTrack} aria-hidden="true"><span style={{ width: `${Math.max(0, row.value) / peak * 100}%` }} /></div>
+      {row.detail ? <small>{row.detail}</small> : null}
+    </li>)}
+  </ul>;
+}

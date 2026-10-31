@@ -13,6 +13,11 @@ type Listener = () => void;
 const listeners = new Set<Listener>();
 
 /** Tell every mounted consumer that sales changed. */
+export function subscribeSales(listener: Listener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
 export function notifySalesChanged(): void {
   for (const listener of listeners) listener();
 }

@@ -4,6 +4,7 @@ import { useAuth } from '@/app/AuthContext';
 import { APP_CONFIG } from '@/config/app.config';
 import { LogoutIcon } from '@/components/ui/Icons';
 import { cn } from '@/utils/cn';
+import { BrandMark } from './BrandMark';
 import styles from './Sidebar.module.css';
 
 /**
@@ -19,17 +20,7 @@ export function Sidebar() {
   return (
     <aside className={styles.sidebar} aria-label="Main">
       <div className={styles.brand}>
-        <span className={styles.mark} aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" width="17" height="17">
-            <path
-              d="M5 8.5h14M5 8.5 6.5 18h11L19 8.5M5 8.5 7.5 5h9L19 8.5"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </span>
+        <BrandMark />
         <span className={styles.brandText}>
           <span className={styles.brandName}>{APP_CONFIG.name}</span>
           <span className={styles.brandMeta}>v{APP_CONFIG.version}</span>

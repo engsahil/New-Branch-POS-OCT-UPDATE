@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useAuth } from '@/app/AuthContext';
 import styles from './AdminMenu.module.css';
 
 export interface AdminMenuProps {
@@ -42,6 +43,9 @@ export function AdminMenu({
   onSettings,
 }: AdminMenuProps) {
   const [open, setOpen] = useState(false);
+  const { user } = useAuth();
+  const [failedAvatar, setFailedAvatar] = useState<string | null>(null);
+  const avatar = user?.avatar?.dataUrl;
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -69,11 +73,9 @@ export function AdminMenu({
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <span className={styles.avatar} aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7">
-            <circle cx="12" cy="8.5" r="3.5" />
-            <path d="M5 20a7 7 0 0 1 14 0" strokeLinecap="round" />
-          </svg>
+        <span className={styles.avatar} style={{ overflow: 'hidden' }} aria-hidden="true">
+          {avatar && failedAvatar !== avatar ? <img src={avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 'inherit' }} onError={() => setFailedAvatar(avatar)} /> :
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><circle cx="12" cy="8.5" r="3.5" /><path d="M5 20a7 7 0 0 1 14 0" strokeLinecap="round" /></svg>}
         </span>
         <span className={styles.text}>
           <span className={styles.name}>{name?.trim() || 'Admin'}</span>

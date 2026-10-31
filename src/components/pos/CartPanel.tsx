@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, Input } from '@/components/ui';
 import { CloseIcon, MinusIcon, PlusIcon } from '@/components/ui/Icons';
 import {
   lineDiscount,
   lineTotal,
+  lineUnitTotal,
   type CartLine,
   type CartTotals,
 } from '@/services/orderService';
@@ -57,6 +58,11 @@ export function CartPanel({
   const { items: availableAddOns } = useAddOns(true);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [picker, setPicker] = useState<'toppings' | 'addons' | null>(null);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const paymentRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (paymentOpen) paymentRef.current?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+  }, [paymentOpen]);
 
   /*
    * Customer paid amount. Empty means the customer pays the exact total,
@@ -73,6 +79,9 @@ export function CartPanel({
       setPaidText('');
       setDiscountText('');
       setPaymentMethod('cash');
+      setPaymentOpen(false);
+      setExpanded(null);
+      setPicker(null);
     }
   }, [lines.length]);
 
@@ -162,142 +171,98 @@ export function CartPanel({
           </p>
         </div>
       ) : (
-        <ul className={styles.lines}>
-          {lines.map((line, lineIndex) => {
-            const label = line.sizeLabel ? `${line.name} ${line.sizeLabel}` : line.name;
-            const isExpanded = expanded === line.key;
-            const instanceLabel = `${label}, item ${lineIndex + 1}`;
-            const itemSaving = lineDiscount(line);
-            const lineGross = lineTotal(line);
-
-            return (
-              <li key={line.key} className={styles.line}>
-                <div className={styles.lineMain}>
-                  <span className={styles.lineName}>{line.name}</span>
-                  <span className={styles.lineMeta}>
-                    {line.sizeLabel ? `${line.sizeLabel} · ${formatMoney(line.unitPrice)}` : formatMoney(line.unitPrice)}
-                    {line.toppings.length > 0 ? ` • Toppings: ${line.toppings.map((t) => t.name).join(', ')}` : ''}
-                    {line.addOns.length > 0 ? ` • Add-ons: ${line.addOns.map((a) => a.name).join(', ')}` : ''}
-                    {itemSaving > 0 ? ` • ${line.discountPercent}% off` : ''}
-                  </span>
-                </div>
-
-                <div className={styles.lineControls}>
-                  <div className={styles.stepper}>
-                    <button
-                      type="button"
-                      className={styles.stepButton}
-                      onClick={() => onDecrement(line.key)}
-                      aria-label={`Decrease ${instanceLabel} quantity`}
-                    >
-                      <MinusIcon width={14} height={14} />
-                    </button>
-                    <span className={styles.quantity}>{line.quantity}</span>
-                    <button
-                      type="button"
-                      className={styles.stepButton}
-                      onClick={() => onIncrement(line.key)}
-                      aria-label={`Increase ${instanceLabel} quantity`}
-                    >
-                      <PlusIcon width={14} height={14} />
+        <div className={styles.orderBody}>
+          <div className={styles.listHeading}>
+            <span>Order items</span>
+            <span>{lines.length} line{lines.length === 1 ? '' : 's'}</span>
+          </div>
+          <ul className={styles.lines} aria-label="Order items">
+            {lines.map((line, lineIndex) => {
+              const label = line.sizeLabel ? `${line.name} (${line.sizeLabel})` : line.name;
+              const isExpanded = expanded === line.key;
+              const instanceLabel = `${label}, item ${lineIndex + 1}`;
+              const itemSaving = lineDiscount(line);
+              const lineGross = lineTotal(line);
+              const modifiers = [
+                ...line.toppings.map((entry, index) => ({ ...entry, type: 'Topping', key: `topping-${entry.modifierId ?? index}` })),
+                ...line.addOns.map((entry, index) => ({ ...entry, type: 'Add-on', key: `addon-${entry.modifierId ?? index}` })),
+              ];
+              return (
+                <li key={line.key} className={styles.line} data-cart-line={line.key} aria-label={instanceLabel}>
+                  <div className={styles.lineHeading}>
+                    <h3 className={styles.lineName}>{line.name}</h3>
+                    <button type="button" className={styles.remove} onClick={() => onRemove(line.key)}
+                      aria-label={`Remove ${instanceLabel}`} title="Remove item" disabled={completing}>
+                      <CloseIcon width={16} height={16} />
                     </button>
                   </div>
-
-                  <span className={styles.lineTotal}>
-                    {formatMoney(
-                      itemSaving > 0 ? lineGross - itemSaving : lineGross,
-                    )}
-                  </span>
-
-                  <button
-                    type="button"
-                    className={styles.remove}
-                    onClick={() => onRemove(line.key)}
-                    aria-label={`Remove ${instanceLabel}`}
-                  >
-                    <CloseIcon width={15} height={15} />
-                  </button>
-                </div>
-
-                <div className={styles.modifierActions}>
-                  {(['toppings', 'addons'] as const).map((type) => {
-                    const count = type === 'toppings' ? line.toppings.length : line.addOns.length;
-                    return <button key={type} type="button" className={styles.modifierButton}
-                      aria-label={`${type === 'toppings' ? 'Toppings' : 'Add-ons'} for ${instanceLabel}`}
-                      aria-expanded={isExpanded && picker === type}
-                      onClick={() => toggleExpand(line.key, type)}>
-                      {type === 'toppings' ? 'Toppings' : 'Add-ons'}{count ? ` (${count})` : ''}
-                    </button>;
-                  })}
-                  {line.quantity > 1 ? <button type="button" className={styles.modifierButton} aria-label={`Split one ${instanceLabel}`} onClick={() => onSplit(line.key)}>Split one item</button> : null}
-                </div>
-                {line.quantity > 1 ? <p className={styles.lineMeta}>Choices apply to all {line.quantity} on this line. Split one to customise a single item.</p> : null}
-                {isExpanded ? <div className={styles.modifierPicker}>
-                  {(() => {
-                    const catalog = picker === 'toppings' ? availableToppings : availableAddOns;
-                    const choices = catalog.filter((record) => applicable(record, line));
-                    const selected = picker === 'toppings' ? line.toppings : line.addOns;
-                    return <>
-                      <p className={styles.lineMeta}>Only this cart line is changed.{line.kind === 'deal' ? ' Product-specific options are available on individual items.' : ''}</p>
-                      {choices.length === 0 ? <span className={styles.lineMeta}>No applicable {picker === 'toppings' ? 'toppings' : 'add-ons'} configured. Manage these in Settings.</span> : choices.map((record) => {
-                        const checked = selected.some((entry) => entry.modifierId === record.id || (!entry.modifierId && entry.name === record.name));
-                        return <label key={record.id} className={styles.modifierChoice}>
-                          <input type="checkbox" checked={checked} onChange={() => picker === 'toppings' ? toggleTopping(line, record as ToppingRecord) : toggleAddOn(line, record as AddOnRecord)} />
-                          <span>{record.name}</span><span>{record.price ? `+${formatMoney(record.price)}` : 'Free'}</span>
-                        </label>;
-                      })}
-                      {selected.length ? <div className={styles.selectedModifiers}>
-                        {selected.map((entry, index) => <button type="button" key={entry.modifierId ?? `${entry.name}-${index}`}
-                          aria-label={`Remove ${entry.name} from ${instanceLabel}`}
-                          onClick={() => picker === 'toppings'
-                            ? onUpdateToppings(line.key, line.toppings.filter((_, i) => i !== index))
-                            : onUpdateAddOns(line.key, line.addOns.filter((_, i) => i !== index))}>
-                          {entry.name} · {formatMoney(entry.price)} ×
-                        </button>)}
-                      </div> : null}
-                    </>;
-                  })()}
-                </div> : null}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      <footer className={styles.footer}>
-        <dl className={styles.totals}>
-          <div className={styles.totalRow}>
-            <dt>Subtotal</dt>
-            <dd>{formatMoney(totals.subtotal)}</dd>
-          </div>
-
-          {totals.discountTotal > 0 ? (
-            <div className={`${styles.totalRow} ${styles.discountRow}`}>
-              <dt>Discount</dt>
-              <dd>-{formatMoney(totals.discountTotal)}</dd>
-            </div>
-          ) : null}
-
-          {totals.taxPercent > 0 ? (
-            <div className={styles.totalRow}>
-              <dt>
-                Tax ({totals.taxPercent}%
-                {totals.taxInclusive ? ', included' : ''})
-              </dt>
-              <dd>{formatMoney(totals.taxTotal)}</dd>
-            </div>
-          ) : null}
-
-          <div className={`${styles.totalRow} ${styles.grandRow}`}>
-            <dt>Total</dt>
-            <dd className={styles.grandValue}>
-              {formatMoney(totals.grandTotal)}
-            </dd>
-          </div>
-        </dl>
-
-        {!empty ? (
-          <div className={styles.payment}>
+                  <dl className={styles.lineDetails}>
+                    <div><dt>{line.kind === 'deal' ? 'Type' : 'Size'}</dt><dd>{line.sizeLabel || (line.kind === 'deal' ? 'Deal' : 'Standard')}</dd></div>
+                    <div><dt>Unit price</dt><dd>{formatMoney(lineUnitTotal(line))}</dd></div>
+                  </dl>
+                  {modifiers.length ? <ul className={styles.modifierSummary} aria-label={`Selected options for ${instanceLabel}`}>
+                    {modifiers.map((entry) => <li key={entry.key}>
+                      <span>{entry.name}<small>{entry.type}</small></span>
+                      <span>{entry.price ? `+${formatMoney(entry.price)}` : 'Free'}</span>
+                    </li>)}
+                  </ul> : <p className={styles.noModifiers}>No add-ons or toppings selected</p>}
+                  <div className={styles.lineControls}>
+                    <div className={styles.stepper} role="group" aria-label={`Quantity for ${instanceLabel}`}>
+                      <button type="button" className={styles.stepButton} onClick={() => onDecrement(line.key)}
+                        aria-label={`Decrease ${instanceLabel} quantity`} disabled={completing}><MinusIcon width={16} height={16} /></button>
+                      <span className={styles.quantity} aria-label={`Quantity ${line.quantity}`}>{line.quantity}</span>
+                      <button type="button" className={styles.stepButton} onClick={() => onIncrement(line.key)}
+                        aria-label={`Increase ${instanceLabel} quantity`} disabled={completing}><PlusIcon width={16} height={16} /></button>
+                    </div>
+                    <div className={styles.lineSubtotal}><span>Item subtotal</span><strong>{formatMoney(lineGross - itemSaving)}</strong></div>
+                  </div>
+                  {itemSaving > 0 ? <p className={styles.saving}>Includes {line.discountPercent}% item discount · save {formatMoney(itemSaving)}</p> : null}
+                  <div className={styles.modifierActions}>
+                    {(['toppings', 'addons'] as const).map((type) => {
+                      const count = type === 'toppings' ? line.toppings.length : line.addOns.length;
+                      return <button key={type} type="button" className={styles.modifierButton}
+                        aria-label={`${type === 'toppings' ? 'Toppings' : 'Add-ons'} for ${instanceLabel}`}
+                        aria-expanded={isExpanded && picker === type} aria-controls={isExpanded && picker === type ? `modifier-picker-${lineIndex}` : undefined}
+                        disabled={completing} onClick={() => toggleExpand(line.key, type)}>
+                        {type === 'toppings' ? 'Toppings' : 'Add-ons'}{count ? ` (${count})` : ''}
+                      </button>;
+                    })}
+                    {line.quantity > 1 ? <button type="button" className={styles.splitButton} disabled={completing}
+                      aria-label={`Split one ${instanceLabel}`} onClick={() => onSplit(line.key)}>Split one item</button> : null}
+                  </div>
+                  {line.quantity > 1 ? <p className={styles.lineHint}>Options apply to all {line.quantity} units. Split one to customise a single item.</p> : null}
+                  {isExpanded ? <div className={styles.modifierPicker} id={`modifier-picker-${lineIndex}`}>
+                    {(() => {
+                      const catalog = picker === 'toppings' ? availableToppings : availableAddOns;
+                      const choices = catalog.filter((record) => applicable(record, line));
+                      const selected = picker === 'toppings' ? line.toppings : line.addOns;
+                      return <>
+                        <p className={styles.lineHint}>Changes apply only to this order line.{line.kind === 'deal' ? ' Product-specific options belong to individual products.' : ''}</p>
+                        {choices.length === 0 ? <span className={styles.lineHint}>No applicable {picker === 'toppings' ? 'toppings' : 'add-ons'} configured. Manage these in Settings.</span> : choices.map((record) => {
+                          const checked = selected.some((entry) => entry.modifierId === record.id || (!entry.modifierId && entry.name === record.name));
+                          return <label key={record.id} className={styles.modifierChoice}>
+                            <input type="checkbox" checked={checked} onChange={() => picker === 'toppings' ? toggleTopping(line, record as ToppingRecord) : toggleAddOn(line, record as AddOnRecord)} />
+                            <span>{record.name}</span><span>{record.price ? `+${formatMoney(record.price)}` : 'Free'}</span>
+                          </label>;
+                        })}
+                        {selected.length ? <div className={styles.selectedModifiers}>
+                          {selected.map((entry, index) => <button type="button" key={entry.modifierId ?? `${entry.name}-${index}`}
+                            aria-label={`Remove ${entry.name} from ${instanceLabel}`}
+                            onClick={() => picker === 'toppings'
+                              ? onUpdateToppings(line.key, line.toppings.filter((_, i) => i !== index))
+                              : onUpdateAddOns(line.key, line.addOns.filter((_, i) => i !== index))}>
+                            {entry.name} · {formatMoney(entry.price)} ×
+                          </button>)}
+                        </div> : null}
+                      </>;
+                    })()}
+                  </div> : null}
+                </li>
+              );
+            })}
+          </ul>
+        {!empty && paymentOpen ? (
+          <div className={styles.payment} id="cart-payment-fields" ref={paymentRef}>
             <Input
               label="Discount"
               name="discount"
@@ -364,7 +329,36 @@ export function CartPanel({
             </div>
           </div>
         ) : null}
+        </div>
+      )}
 
+      <footer className={`${styles.footer}`}>
+        <dl className={styles.totals}>
+          <div className={styles.totalRow}>
+            <dt>Subtotal</dt>
+            <dd>{formatMoney(totals.subtotal)}</dd>
+          </div>
+
+          <div className={`${styles.totalRow} ${styles.discountRow}`}>
+            <dt>Discount</dt><dd>{totals.discountTotal > 0 ? '−' : ''}{formatMoney(totals.discountTotal)}</dd>
+          </div>
+
+          <div className={styles.totalRow}><dt>Tax ({totals.taxPercent}%{totals.taxInclusive ? ', included' : ''})</dt><dd>{formatMoney(totals.taxTotal)}</dd></div>
+
+          <div className={`${styles.totalRow} ${styles.grandRow}`}>
+            <dt>Grand total</dt>
+            <dd className={styles.grandValue}>
+              {formatMoney(totals.grandTotal)}
+            </dd>
+          </div>
+        </dl>
+
+
+
+        {!empty ? <button type="button" className={styles.paymentToggle} aria-expanded={paymentOpen}
+          aria-controls="cart-payment-fields" onClick={() => setPaymentOpen((value) => !value)}>
+          <span>Discount & payment</span><span>{paymentOpen ? 'Hide' : 'Edit'}</span>
+        </button> : null}
         <div className={styles.actions}>
           <Button
             variant="ghost"

@@ -2,6 +2,42 @@
 
 Offline-first Restaurant Point of Sale application. Version **6.1.0**.
 
+## v6.1.0 — focused UI update (this source package)
+
+Version remains **6.1.0**; no database migration is added by this update.
+
+- **Current Order:** each cart line is a separate card with name, size, unit
+  price, selected options, independent quantity controls, remove, split-one and
+  line subtotal. The item region keeps a usable height; detailed discount/payment
+  fields expand inside the scrollable order body so totals/checkout cannot squeeze
+  the product list to zero. Stacked mobile layouts use an internal item scroll and
+  a static checkout footer (no sticky overlay covering controls).
+- **Sales vs Reports:** Sales is unchanged. `/reports` now has a dedicated
+  analytics page: day/week/month/year/custom ranges, previous-period comparison,
+  charged sales/revenue/orders/average/discount KPIs, trend line, payment doughnut,
+  product/category bars, status and stored-tax summaries, period table and CSV.
+  Product/category values are gross merchandise before order-level discount/tax;
+  categories use the current menu. Refunded/cancelled orders are excluded from
+  sales KPIs and shown separately. No sample data is generated.
+- **Branding:** the saved restaurant logo replaces the sidebar default mark and
+  is shared with receipts. Upload/remove in Settings → Restaurant; transparent
+  PNG/WebP/JPG are contained without distortion. Invalid images fall back to the
+  default mark. The duplicate in-page POS logo was removed.
+- **Profile:** local administrator profile adds picture upload/replace/remove,
+  full name, email, phone, job title, department, address and bio. Username and
+  business name remain read-only here and are changed through the existing
+  Security/Restaurant settings. Profile fields are additive optional fields on
+  the existing admin record; passwords, sessions and permissions are untouched.
+  Business backups intentionally continue to exclude the admin/credential store.
+- **Notifications:** one click/open updates read state immediately, persists the
+  first read timestamp, refreshes the badge, and survives reload. Mark-all-read,
+  dedupe and category preferences are preserved.
+
+Focused verification: `npm test` includes `scripts/test-ui-reporting.mjs`.
+With a test-API build and temporary browser tools, run
+`node scripts/verify-ui-browser.mjs` (33 synthetic Chromium checks). See
+`RELEASE-6.1.0-UI.md` for the executed record and limitations.
+
 ## v6.1.0 — upgrade notes
 
 - **Database v9 (additive):** adds `expenses` only. Existing IndexedDB records,

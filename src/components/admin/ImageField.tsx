@@ -36,6 +36,8 @@ export interface ImageFieldProps {
   fallbackNote?: string;
   /** Label for clearing the custom image. Defaults to "Remove". */
   removeLabel?: string;
+  /** Defaults to the existing logo formats. */
+  acceptedTypes?: readonly string[];
 }
 
 /**
@@ -57,10 +59,12 @@ export function ImageField({
   fallbackSrc,
   fallbackNote,
   removeLabel = 'Remove',
+  acceptedTypes = LOGO_ACCEPTED_TYPES,
 }: ImageFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
 
   const labelId = `${idPrefix}-label`;
   const altText = `${label} preview`;
@@ -99,11 +103,12 @@ export function ImageField({
 
       <div className={styles.row}>
         <div className={styles.preview} aria-live="polite">
-          {value ? (
+          {value && failedSrc !== value.dataUrl ? (
             <img
               src={value.dataUrl}
               alt={altText}
               className={styles.image}
+              onError={() => setFailedSrc(value.dataUrl)}
               style={aspect ? { aspectRatio: String(aspect) } : undefined}
             />
           ) : fallbackSrc ? (
@@ -133,7 +138,7 @@ export function ImageField({
               {busy ? 'Optimising' : value ? 'Replace' : uploadLabel}
             </Button>
 
-            {value ? (
+            {value && failedSrc !== value.dataUrl ? (
               <Button
                 variant="ghost"
                 size="sm"
@@ -172,7 +177,7 @@ export function ImageField({
       <input
         ref={inputRef}
         type="file"
-        accept={LOGO_ACCEPTED_TYPES.join(',')}
+        accept={acceptedTypes.join(',')}
         className={styles.input}
         tabIndex={-1}
         aria-hidden="true"

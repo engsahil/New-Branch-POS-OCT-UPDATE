@@ -26,6 +26,7 @@ const DashboardPage = lazy(() => import('@/pages/DashboardPage'));
 const PosPage = lazy(() => import('@/pages/PosPage'));
 const ExpensesPage = lazy(() => import('@/pages/ExpensesPage'));
 const SalesPage = lazy(() => import('@/pages/SalesPage'));
+const ReportsPage = lazy(() => import('@/pages/ReportsPage'));
 const CustomersPage = lazy(() => import('@/pages/CustomersPage'));
 const MenuPage = lazy(() => import('@/pages/MenuPage'));
 const DealsPage = lazy(() => import('@/pages/DealsPage'));
@@ -74,7 +75,7 @@ export const appRoutes: AppRoute[] = [
   { id: 'admin', path: 'admin', element: <AdminPage /> },
   { id: 'deliveries', path: 'deliveries', element: <DeliveryPage /> },
   { id: 'purchases', path: 'purchases', element: <PurchasesPage /> },
-  { id: 'reports', path: 'reports', element: <SalesPage /> },
+  { id: 'reports', path: 'reports', element: <ReportsPage /> },
   { id: 'expenses', path: 'expenses', element: <ExpensesPage /> },
   { id: 'profile', path: 'profile', element: <ProfilePage /> },
   { id: 'not-found', path: '*', element: <NotFoundPage /> },
@@ -158,7 +159,7 @@ export const NAV_ITEMS: NavItem[] = [
   {
     id: 'reports',
     label: 'Reports',
-    description: 'Sales analysis',
+    description: 'Business analytics',
     path: ROUTE_PATHS.reports,
     icon: ReportsIcon,
     primary: true,

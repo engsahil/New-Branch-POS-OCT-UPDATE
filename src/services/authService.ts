@@ -66,6 +66,11 @@ function toUser(record: AdminCredentials): AuthUser {
     displayName: record.displayName ?? '',
     email: record.email ?? '',
     phone: record.phone ?? '',
+    avatar: record.avatar ?? null,
+    jobTitle: record.jobTitle ?? '',
+    department: record.department ?? '',
+    address: record.address ?? '',
+    bio: record.bio ?? '',
   };
 }
 
@@ -369,24 +374,39 @@ export const authService = {
     displayName: string;
     email: string;
     phone: string;
+    avatar?: AdminCredentials['avatar'];
+    jobTitle?: string;
+    department?: string;
+    address?: string;
+    bio?: string;
   }): Promise<{ ok: boolean; error?: string }> {
     const record = await requireCredentials();
+    const displayName = input.displayName.trim();
     const email = input.email.trim();
     const phone = input.phone.trim();
-
-    if (email && !EMAIL_PATTERN.test(email)) {
+    if (!displayName) return { ok: false, error: 'Full name is required.' };
+    if (displayName.length > 60) return { ok: false, error: 'Full name must be 60 characters or fewer.' };
+    if (email && (email.length > 120 || !EMAIL_PATTERN.test(email))) {
       return { ok: false, error: 'Enter a valid email address.' };
     }
-    if (phone && phone.replace(/\D/g, '').length < 6) {
+    if (phone && (phone.length > 30 || phone.replace(/\D/g, '').length < 6 || !/^[\d+() .-]+$/.test(phone))) {
       return { ok: false, error: 'Enter a valid phone number.' };
     }
-
+    const avatar = input.avatar ?? null;
+    if (avatar && (!/^data:image\/(png|jpeg|webp);base64,/.test(avatar.dataUrl) || avatar.bytes > 300_000 || avatar.width > 512 || avatar.height > 512)) {
+      return { ok: false, error: 'Use a PNG, JPG or WebP profile picture up to 512px (300 KB after optimisation).' };
+    }
+    const jobTitle = (input.jobTitle ?? '').trim();
+    const department = (input.department ?? '').trim();
+    const address = (input.address ?? '').trim();
+    const bio = (input.bio ?? '').trim();
+    if (jobTitle.length > 80 || department.length > 80 || address.length > 240 || bio.length > 400) {
+      return { ok: false, error: 'Profile text is too long. Check job title, department, address and bio limits.' };
+    }
+    // Credentials, username, role and session are deliberately untouched.
     await adminRepository.update(record.id, {
-      displayName: input.displayName.trim().slice(0, 60),
-      email: email.slice(0, 120),
-      phone: phone.slice(0, 30),
+      displayName, email, phone, avatar, jobTitle, department, address, bio,
     } as Partial<AdminCredentials>);
-
     return { ok: true };
   },
 

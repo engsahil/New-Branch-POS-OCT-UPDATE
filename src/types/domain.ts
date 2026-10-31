@@ -37,6 +37,12 @@ export interface AdminRecord extends BaseEntity {
   displayName?: string;
   email?: string;
   phone?: string;
+  /** Optional local profile details; no authentication or permission meaning. */
+  avatar?: StoredImage | null;
+  jobTitle?: string;
+  department?: string;
+  address?: string;
+  bio?: string;
 }
 
 /* ------------------------------------------------------------------ */

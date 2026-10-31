@@ -23,6 +23,7 @@ export interface UseNotificationsResult {
   reload: () => Promise<void>;
   markRead: (id: string) => Promise<void>;
   markAllRead: () => Promise<void>;
+  markingAllRead: boolean;
 }
 
 export function useNotifications(limit = 40): UseNotificationsResult {
@@ -33,6 +34,8 @@ export function useNotifications(limit = 40): UseNotificationsResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const request = useRef(0);
+  const pending = useRef(new Set<string>());
+  const [markingAllRead, setMarkingAllRead] = useState(false);
 
   const load = useCallback(async () => {
     const sequence = ++request.current;
@@ -55,12 +58,31 @@ export function useNotifications(limit = 40): UseNotificationsResult {
   }, [load]);
 
   const markRead = useCallback(async (id: string) => {
-    await notificationService.markRead(id);
-  }, []);
+    if (pending.current.has(id)) return;
+    pending.current.add(id);
+    // Invalidate an older in-flight snapshot, then reflect the click immediately.
+    request.current += 1;
+    setSnapshot((prev) => {
+      const row = prev.notifications.find((entry) => entry.id === id);
+      if (!row || row.readAt) return prev;
+      const readAt = new Date().toISOString();
+      return { ...prev, notifications: prev.notifications.map((entry) => entry.id === id ? { ...entry, readAt } : entry), unreadCount: Math.max(0, prev.unreadCount - 1) };
+    });
+    try { await notificationService.markRead(id); setError(null); }
+    catch { setError('Read status could not be saved. Please retry.'); await load(); }
+    finally { pending.current.delete(id); }
+  }, [load]);
 
   const markAllRead = useCallback(async () => {
-    await notificationService.markAllRead();
-  }, []);
+    if (markingAllRead) return;
+    setMarkingAllRead(true);
+    request.current += 1;
+    const readAt = new Date().toISOString();
+    setSnapshot((prev) => ({ ...prev, unreadCount: 0, notifications: prev.notifications.map((entry) => entry.readAt ? entry : { ...entry, readAt }) }));
+    try { await notificationService.markAllRead(); setError(null); }
+    catch { setError('Read status could not be saved. Please retry.'); await load(); }
+    finally { setMarkingAllRead(false); }
+  }, [load, markingAllRead]);
 
   return {
     notifications: snapshot.notifications,
@@ -71,5 +93,6 @@ export function useNotifications(limit = 40): UseNotificationsResult {
     reload: load,
     markRead,
     markAllRead,
+    markingAllRead,
   };
 }

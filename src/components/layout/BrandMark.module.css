@@ -1,0 +1,2 @@
+.mark { display:grid; place-items:center; width:34px; height:34px; flex-shrink:0; border-radius:var(--radius-md); background:var(--color-primary); color:var(--color-primary-contrast); overflow:hidden; }
+.logo { display:block; width:100%; height:100%; object-fit:contain; padding:3px; background:var(--color-surface); }
