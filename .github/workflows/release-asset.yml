@@ -1,5 +1,7 @@
 name: Attach verified release archive
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       tag:
@@ -12,11 +14,12 @@ permissions:
   contents: write
 jobs:
   attach:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[attach-v6.1.0]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.ref || 'b555d6fc7357a6f79474eaaeae3df4aa149996cf' }}
           fetch-depth: 1
       - name: Build source archive from the exact release commit
         run: |
@@ -25,4 +28,4 @@ jobs:
       - name: Attach to the existing release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ inputs.tag }}" POS-v6.1.0-FINAL-VERIFIED.zip --clobber
+        run: gh release upload "${{ inputs.tag || 'v6.1.0' }}" POS-v6.1.0-FINAL-VERIFIED.zip --clobber
