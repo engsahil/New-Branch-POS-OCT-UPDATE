@@ -1,0 +1,28 @@
+name: Attach verified release archive
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag
+        required: true
+      ref:
+        description: Commit to archive
+        required: true
+permissions:
+  contents: write
+jobs:
+  attach:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 1
+      - name: Build source archive from the exact release commit
+        run: |
+          git archive --format=zip --prefix=POS-v6.1.0/ -o POS-v6.1.0-FINAL-VERIFIED.zip HEAD
+          sha256sum POS-v6.1.0-FINAL-VERIFIED.zip
+      - name: Attach to the existing release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.tag }}" POS-v6.1.0-FINAL-VERIFIED.zip --clobber
